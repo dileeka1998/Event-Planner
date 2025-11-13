@@ -8,19 +8,28 @@ export class AiService {
 
   constructor(private http: HttpService) {}
 
-  async parseBrief(dto: { text: string }) {
+  async parseBrief(dto: { text: string }): Promise<{
+    estimatedAudience?: number;
+    budgetLkr?: number;
+    tracks?: number;
+    title?: string;
+  }> {
     this.logger.log('Sending brief to AI service for parsing');
     try {
       const res = await firstValueFrom(this.http.post('/parse-brief', dto));
       this.logger.log('Successfully parsed brief from AI service');
-      return res.data;
-    } catch (error) {
-      console.log(error)
-      if(error instanceof Error){
-      this.logger.error('Failed to parse brief from AI service', error.stack);
-      }else {
-        this.logger.error('Failed to parse brief from AI service', JSON.stringify(error));
-      }
+      const data = res.data as { 
+        estimatedAudience?: number; 
+        budgetLkr?: number; 
+        tracks?: number;
+        title?: string;
+      };
+      this.logger.log(`AI parsed - estimatedAudience: ${data.estimatedAudience}, budgetLkr: ${data.budgetLkr}, title: ${data.title}`);
+      return data;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Failed to parse brief from AI service: ${errorMessage}`, errorStack);
       throw error;
     }
   }

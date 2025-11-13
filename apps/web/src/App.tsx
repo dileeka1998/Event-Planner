@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { DashboardLayout } from './components/layout/DashboardLayout';
 import { LoginPage } from './pages/LoginPage';
@@ -11,46 +10,64 @@ import { RecommendationsPage } from './pages/RecommendationsPage';
 import { RSVPPage } from './pages/RSVPPage';
 import { AdminPanel } from './pages/AdminPanel';
 import { SettingsPage } from './pages/SettingsPage';
+import { VenuesPage } from './pages/VenuesPage';
+import { AttendeesPage } from './pages/AttendeesPage';
+import { TeamPage } from './pages/TeamPage';
 import { User } from './types';
-import api, { login as apiLogin } from './api';
+
+// Simple JWT decode (without verification - just for getting user info)
+function decodeJWT(token: string): any {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+}
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkUser = async () => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        try {
-          const { data } = await api.get('/users/me');
-          setUser(data);
-        } catch (error) {
-          console.error("Failed to fetch user", error);
-          localStorage.removeItem('token');
-        }
+    const token = localStorage.getItem('app_token');
+    if (token) {
+      const decoded = decodeJWT(token);
+      if (decoded && decoded.sub && decoded.email) {
+        // Create user object from JWT payload
+        setCurrentUser({
+          id: decoded.sub,
+          email: decoded.email,
+          name: decoded.name || decoded.email.split('@')[0],
+          role: decoded.role || 'ORGANIZER',
+        });
+        setIsAuthenticated(true);
+      } else {
+        localStorage.removeItem('app_token');
       }
-      setLoading(false);
-    };
-    checkUser();
+    }
+    setLoading(false);
   }, []);
 
-  const handleLogin = async (credentials: any) => {
-    try {
-      const { data } = await apiLogin(credentials);
-      localStorage.setItem('token', data.token);
-      setUser(data.user);
-      setCurrentPage('dashboard');
-    } catch (error) {
-      console.error('Login failed', error);
-      // You might want to show an error to the user
-    }
+  const handleLogin = (user: User, token: string) => {
+    setCurrentUser(user);
+    setIsAuthenticated(true);
+    setCurrentPage('dashboard');
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    setUser(null);
+    localStorage.removeItem('app_token');
+    setCurrentUser(null);
+    setIsAuthenticated(false);
     setCurrentPage('dashboard');
   };
 
@@ -59,47 +76,58 @@ export default function App() {
   };
 
   if (loading) {
-    return <div>Loading...</div>; // Or a proper spinner
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-gray-600">Loading...</div>
+      </div>
+    );
   }
 
-  if (!user) {
+  if (!isAuthenticated || !currentUser) {
     return <LoginPage onLogin={handleLogin} />;
   }
 
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        if (user.role === 'ORGANIZER') {
+        if (currentUser.role === 'ORGANIZER') {
           return <OrganizerDashboard onNavigate={handleNavigate} />;
         }
+        // For Admin and Attendee, show a simplified dashboard
         return (
           <div className="space-y-6">
             <div>
-              <h1 className="text-gray-900 mb-2">Welcome back, {user.name}!</h1>
+              <h1 className="text-gray-900 mb-2">Welcome back, {currentUser.name}!</h1>
               <p className="text-gray-600">
-                {user.role === 'ADMIN'
-                  ? 'Access the Admin Panel to manage the system'
+                {currentUser.role === 'ADMIN' 
+                  ? 'Access the Admin Panel to manage the system' 
                   : 'Explore recommended sessions and manage your schedule'}
               </p>
             </div>
           </div>
         );
       case 'events':
-        return <EventsPage user={user} />;
+        return <EventsPage />;
+      case 'venues':
+        return <VenuesPage />;
       case 'speakers':
         return <SpeakersPage />;
       case 'scheduler':
         return <SchedulerPage />;
       case 'budget':
         return <BudgetPage />;
+      case 'attendees':
+        return <AttendeesPage />;
       case 'recommendations':
         return <RecommendationsPage />;
       case 'rsvp':
-        return <RSVPPage userRole={user.role === 'ATTENDEE' ? 'Attendee' : 'Organizer'} />;
+        return <RSVPPage userRole={currentUser.role === 'ATTENDEE' ? 'Attendee' : 'Organizer'} />;
       case 'admin':
         return <AdminPanel />;
+      case 'team':
+        return <TeamPage />;
       case 'settings':
-        return <SettingsPage user={user} />;
+        return <SettingsPage user={currentUser} />;
       default:
         return <OrganizerDashboard onNavigate={handleNavigate} />;
     }
@@ -109,7 +137,7 @@ export default function App() {
     <DashboardLayout
       currentPage={currentPage}
       onNavigate={handleNavigate}
-      user={user}
+      user={currentUser}
       onLogout={handleLogout}
     >
       {renderPage()}

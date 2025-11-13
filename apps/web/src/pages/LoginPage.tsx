@@ -5,39 +5,64 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Calendar } from 'lucide-react';
-import { signup as apiSignup } from '../api';
+import { User } from '../types';
+import { signup, login } from '../api';
+import { toast } from 'sonner';
 
 interface LoginPageProps {
-  onLogin: (credentials: any) => void;
+  onLogin: (user: User, token: string) => void;
 }
 
 export function LoginPage({ onLogin }: LoginPageProps) {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin({ email: loginEmail, password: loginPassword });
+    if (!loginEmail || !loginPassword) {
+      toast.error('Please enter email and password');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const { data } = await login({ email: loginEmail, password: loginPassword });
+      localStorage.setItem('app_token', data.token);
+      onLogin(data.user, data.token);
+      toast.success('Login successful!');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Login failed. Please check your credentials.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (regPassword !== regConfirmPassword) {
-      alert("Passwords don't match");
+      toast.error("Passwords don't match");
       return;
     }
+    if (!regName || !regEmail || !regPassword) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+
+    setIsLoading(true);
     try {
-      const { data } = await apiSignup({ name: regName, email: regEmail, password: regPassword });
-      // Automatically log in the user after successful registration
-      onLogin({ email: regEmail, password: regPassword });
-    } catch (error) {
-      console.error('Registration failed', error);
-      // Show an error to the user
+      const { data } = await signup({ name: regName, email: regEmail, password: regPassword });
+      localStorage.setItem('app_token', data.token);
+      onLogin(data.user, data.token);
+      toast.success('Registration successful!');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Registration failed. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -99,6 +124,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                       value={loginEmail}
                       onChange={(e) => setLoginEmail(e.target.value)}
                       required 
+                      disabled={isLoading}
                     />
                   </div>
                   
@@ -111,14 +137,16 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
                       required 
+                      disabled={isLoading}
                     />
                   </div>
 
                   <Button 
                     type="submit" 
                     className="w-full bg-[#0F6AB4] hover:bg-[#0D5A9A]"
+                    disabled={isLoading}
                   >
-                    Login
+                    {isLoading ? 'Logging in...' : 'Login'}
                   </Button>
 
                   <p className="text-center text-sm text-gray-600">
@@ -138,6 +166,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                       value={regName}
                       onChange={(e) => setRegName(e.target.value)}
                       required 
+                      disabled={isLoading}
                     />
                   </div>
 
@@ -150,6 +179,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
                       required 
+                      disabled={isLoading}
                     />
                   </div>
                   
@@ -162,6 +192,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                       value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)}
                       required 
+                      disabled={isLoading}
                     />
                   </div>
 
@@ -174,14 +205,16 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                       value={regConfirmPassword}
                       onChange={(e) => setRegConfirmPassword(e.target.value)}
                       required 
+                      disabled={isLoading}
                     />
                   </div>
 
                   <Button 
                     type="submit" 
                     className="w-full bg-[#0F6AB4] hover:bg-[#0D5A9A]"
+                    disabled={isLoading}
                   >
-                    Create Account
+                    {isLoading ? 'Creating account...' : 'Create Account'}
                   </Button>
                 </form>
               </TabsContent>

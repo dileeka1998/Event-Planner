@@ -49,15 +49,45 @@ npm run dev
 ```
 - The frontend will be accessible at `http://localhost:5173`.
 
+## Environment Variables
+
+### Backend (Docker)
+The backend services use environment variables defined in `docker-compose.yml`:
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME` - Database connection
+- `AI_BASE_URL` - AI microservice URL (default: `http://ai:8000`)
+- `JWT_SECRET` - JWT secret key (default: `supersecret`)
+- `PORT` - API port (default: `3000`)
+
+### Frontend
+Create `apps/web/.env` with:
+```
+VITE_API_BASE=http://localhost:3000
+VITE_AI_BASE=http://localhost:8000
+```
+
 ## Smoke Test (cURL Commands)
 
-These commands test the core API functionality.
+These commands test the core API functionality. Run them after starting the services.
 
 ### 1. Sign Up a New Organizer
 ```bash
-curl -s -X POST http://localhost:3000/auth/signup \
+curl -X POST http://localhost:3000/auth/signup \
   -H "Content-Type: application/json" \
-  -d '{"email":"org@example.com","name":"Organizer One","password":"pass"}' | jq
+  -d '{"email":"org@example.com","name":"Organizer One","password":"pass"}'
+```
+
+Expected response:
+```json
+{
+  "user": {
+    "id": 1,
+    "email": "org@example.com",
+    "name": "Organizer One",
+    "role": "ORGANIZER",
+    "createdAt": "2025-01-XX..."
+  },
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
 ```
 
 ### 2. Login and Capture JWT Token
@@ -69,10 +99,24 @@ TOKEN=$(curl -s -X POST http://localhost:3000/auth/login \
 echo "Captured Token: $TOKEN"
 ```
 
-### 3. Create an Event (with AI brief)
-*Note: This command assumes the user created via the signup command has an ID of 1. Adjust `organizerId` if necessary.*
+### 3. Create a Venue
 ```bash
-curl -s -X POST http://localhost:3000/events \
+curl -X POST http://localhost:3000/venues \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Convention Center",
+    "address": "123 Main St, Colombo",
+    "capacity": 200,
+    "contactName": "John Doe",
+    "contactPhone": "+94-11-1234567",
+    "hourlyRate": "50000.00"
+  }'
+```
+
+### 4. Create an Event (with AI brief and venue)
+```bash
+curl -X POST http://localhost:3000/events \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -80,13 +124,109 @@ curl -s -X POST http://localhost:3000/events \
     "title": "Tech Summit 2025",
     "startDate": "2025-12-01",
     "endDate": "2025-12-01",
-    "expectedAudience": 150,
-    "budget": "500000.00",
+    "venueId": 1,
     "brief": "One-day summit for 150 attendees, budget ~ LKR 500k. Two tracks AI and Cloud."
-  }' | jq
+  }'
 ```
 
-### 4. List All Events
+The AI will parse the brief and auto-fill `expectedAudience` and `budget`. If `budgetItems` are not provided, the system will generate heuristic budget items (venue 40%, catering 30%, AV 10%, misc 20%).
+
+### 5. Create an Event with Custom Budget Items
 ```bash
-curl -s http://localhost:3000/events | jq
+curl -X POST http://localhost:3000/events \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "organizerId": 1,
+    "title": "Workshop Series",
+    "startDate": "2025-12-15",
+    "endDate": "2025-12-15",
+    "expectedAudience": 50,
+    "budget": "200000.00",
+    "budgetItems": [
+      {
+        "category": "Venue",
+        "description": "Conference hall rental",
+        "estimatedAmount": "80000.00",
+        "quantity": 1
+      },
+      {
+        "category": "Catering",
+        "description": "Lunch and refreshments",
+        "estimatedAmount": "60000.00",
+        "quantity": 50,
+        "unit": "per person"
+      }
+    ]
+  }'
 ```
+
+### 6. Get Event by ID (with relations)
+```bash
+curl http://localhost:3000/events/1
+```
+
+Returns event with `venue`, `eventBudget`, `eventBudget.items`, and `attendees`.
+
+### 7. Register as Attendee
+```bash
+curl -X POST http://localhost:3000/events/1/attendees \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Returns `CONFIRMED` or `WAITLISTED` status based on venue capacity.
+
+### 8. Get Event Attendees
+```bash
+curl http://localhost:3000/events/1/attendees
+```
+
+### 9. Leave Event
+```bash
+curl -X DELETE http://localhost:3000/events/1/attendees/me \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### 10. List All Events
+```bash
+curl http://localhost:3000/events
+```
+
+### 11. List All Venues
+```bash
+curl http://localhost:3000/venues
+```
+
+## API Endpoints Summary
+
+### Authentication
+- `POST /auth/signup` - Register new user
+- `POST /auth/login` - Login and get JWT token
+
+### Events
+- `GET /events` - List all events
+- `GET /events/:id` - Get event with venue, budget, and attendees
+- `POST /events` - Create event (requires auth, supports AI brief parsing)
+
+### Venues
+- `GET /venues` - List all venues
+- `GET /venues/:id` - Get venue by ID
+- `POST /venues` - Create venue (requires auth)
+- `PUT /venues/:id` - Update venue (requires auth)
+- `DELETE /venues/:id` - Delete venue (requires auth)
+
+### Attendees
+- `GET /events/:id/attendees` - Get all attendees for an event
+- `POST /events/:id/attendees` - Register as attendee (requires auth)
+- `DELETE /events/:id/attendees/me` - Leave event (requires auth)
+
+## Features Implemented
+
+✅ **Authentication**: JWT-based signup/login with password hashing  
+✅ **Events**: Create events with venue, budget items, and AI brief parsing  
+✅ **Venues**: Full CRUD operations for venues  
+✅ **Budget Management**: Automatic budget item generation with heuristic split  
+✅ **Attendees**: Registration with capacity checking and waitlist support  
+✅ **AI Integration**: Automatic parsing of event briefs to extract audience and budget  
+✅ **Transactions**: Safe multi-table operations with rollback support  
+✅ **Swagger Docs**: API documentation at `/docs`

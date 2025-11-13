@@ -25,6 +25,7 @@ services:
       DB_NAME: event_planner
       AI_BASE_URL: http://ai:8000
       PORT: 3000
+      JWT_SECRET: ${JWT_SECRET:-supersecret}
     ports:
       - "3000:3000"
     depends_on:

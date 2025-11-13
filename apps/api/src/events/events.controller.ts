@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Param, ParseIntPipe } from '@nestjs/common';
 import { EventsService } from './events.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { AiService } from '../ai/ai.service';
@@ -20,6 +20,14 @@ export class EventsController {
     return this.events.findAll();
   }
 
+  @Get(':id')
+  @ApiOperation({ summary: 'Get an event by ID' })
+  @ApiResponse({ status: 200, description: 'Return the event with venue, budget, and attendees.' })
+  @ApiResponse({ status: 404, description: 'Event not found.' })
+  getOne(@Param('id', ParseIntPipe) id: number) {
+    return this.events.findOne(id);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Post()
   @ApiBearerAuth()
@@ -28,18 +36,34 @@ export class EventsController {
   @ApiResponse({ status: 400, description: 'Bad Request.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async create(@Body() dto: CreateEventDto) {
+    // If brief provided, call AI service to parse and merge fields
     if (dto.brief) {
       try {
         const parsed = await this.ai.parseBrief({ text: dto.brief });
-        dto.expectedAudience = dto.expectedAudience ?? parsed?.estimatedAudience ?? undefined;
+        console.log('AI parsed result:', JSON.stringify(parsed, null, 2));
+        console.log('DTO before merge - expectedAudience:', dto.expectedAudience);
+        
+        // Use AI parsed value if not already provided
+        if (!dto.expectedAudience && parsed?.estimatedAudience) {
+          dto.expectedAudience = parsed.estimatedAudience;
+        }
+        
         if (!dto.budget && parsed?.budgetLkr) {
           dto.budget = String(parsed.budgetLkr);
         }
-      } catch (error) {
+        // Use AI-extracted title if available and title not already set
+        if (!dto.title && parsed?.title) {
+          dto.title = parsed.title;
+        }
+      } catch (error: unknown) {
         // The AI service is optional, so we don't rethrow the error.
         // The logger in the AiService will have already logged the failure.
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.warn(`AI parsing failed (non-fatal): ${errorMessage}`);
       }
     }
+    
+    console.log('Final DTO before service - expectedAudience:', dto.expectedAudience, 'venueId:', dto.venueId);
     return this.events.create(dto);
   }
 }

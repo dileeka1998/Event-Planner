@@ -1,83 +1,47 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Clock, MapPin, User, Grid3x3, List, Plus } from 'lucide-react';
-import { Session } from '../types';
+import { Clock, MapPin, User, Grid3x3, List, Sparkles } from 'lucide-react';
+import { Session, Event } from '../types';
+import { getEvents } from '../api';
+import { toast } from 'sonner';
 
 export function RecommendationsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedTopic, setSelectedTopic] = useState('all');
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const recommendedSessions: (Session & { matchScore: number })[] = [
-    {
-      id: '1',
-      title: 'AI in Modern Applications',
-      speaker: 'Dr. Sarah Chen',
-      track: 'Technology',
-      duration: 60,
-      expectedAudience: 150,
-      time: '09:00 AM',
-      room: 'Room A',
-      matchScore: 95
-    },
-    {
-      id: '2',
-      title: 'Future of Web Development',
-      speaker: 'John Martinez',
-      track: 'Development',
-      duration: 45,
-      expectedAudience: 120,
-      time: '10:30 AM',
-      room: 'Room B',
-      matchScore: 88
-    },
-    {
-      id: '3',
-      title: 'Cloud Architecture Patterns',
-      speaker: 'Emily Watson',
-      track: 'Technology',
-      duration: 90,
-      expectedAudience: 80,
-      time: '01:00 PM',
-      room: 'Room A',
-      matchScore: 82
-    },
-    {
-      id: '4',
-      title: 'Data Science Workshop',
-      speaker: 'Mike Johnson',
-      track: 'Data',
-      duration: 120,
-      expectedAudience: 60,
-      time: '02:00 PM',
-      room: 'Room C',
-      matchScore: 78
-    },
-    {
-      id: '5',
-      title: 'Security Best Practices',
-      speaker: 'Lisa Anderson',
-      track: 'Security',
-      duration: 60,
-      expectedAudience: 100,
-      time: '03:30 PM',
-      room: 'Room B',
-      matchScore: 75
-    },
-    {
-      id: '6',
-      title: 'UX Design Trends 2025',
-      speaker: 'David Lee',
-      track: 'Design',
-      duration: 45,
-      expectedAudience: 90,
-      time: '11:00 AM',
-      room: 'Room A',
-      matchScore: 72
-    },
-  ];
+  useEffect(() => {
+    fetchSessions();
+  }, []);
+
+  const fetchSessions = async () => {
+    setLoading(true);
+    try {
+      const { data: events } = await getEvents();
+      const allSessions: Session[] = [];
+      events.forEach((event: Event) => {
+        if (event.sessions) {
+          allSessions.push(...event.sessions.map((s: any) => ({
+            ...s,
+            track: s.track || 'General',
+            expectedAudience: event.expectedAudience,
+            time: s.startTime ? new Date(s.startTime).toLocaleTimeString() : undefined,
+            room: s.room?.name,
+          })));
+        }
+      });
+      setSessions(allSessions);
+    } catch (error: any) {
+      toast.error('Failed to fetch sessions');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getMatchColor = (score: number) => {
     if (score >= 90) return 'bg-green-500';
@@ -85,6 +49,13 @@ export function RecommendationsPage() {
     if (score >= 70) return 'bg-[#0F6AB4]';
     return 'bg-gray-400';
   };
+
+  const filteredSessions = sessions.filter(session => {
+    if (selectedTopic === 'all') return true;
+    return session.track?.toLowerCase() === selectedTopic.toLowerCase();
+  });
+
+  const uniqueTracks = Array.from(new Set(sessions.map(s => s.track).filter(Boolean)));
 
   return (
     <div className="space-y-6">
@@ -101,37 +72,12 @@ export function RecommendationsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Topics</SelectItem>
-            <SelectItem value="technology">Technology</SelectItem>
-            <SelectItem value="development">Development</SelectItem>
-            <SelectItem value="design">Design</SelectItem>
-            <SelectItem value="data">Data</SelectItem>
-            <SelectItem value="security">Security</SelectItem>
+            {uniqueTracks.map(track => (
+              <SelectItem key={track} value={track}>{track}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
-
-        <Select defaultValue="all">
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Filter by day" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Days</SelectItem>
-            <SelectItem value="day1">Day 1</SelectItem>
-            <SelectItem value="day2">Day 2</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select defaultValue="all">
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Filter by track" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Tracks</SelectItem>
-            <SelectItem value="track1">Track 1</SelectItem>
-            <SelectItem value="track2">Track 2</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <div className="ml-auto flex gap-2">
+        <div className="flex gap-2 ml-auto">
           <Button
             variant={viewMode === 'grid' ? 'default' : 'outline'}
             size="sm"
@@ -149,87 +95,106 @@ export function RecommendationsPage() {
         </div>
       </div>
 
-      {/* Session Cards */}
-      {viewMode === 'grid' ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-gray-600">Loading sessions...</div>
+        </div>
+      ) : filteredSessions.length === 0 ? (
+        <Card>
+          <CardContent className="p-12 text-center">
+            <Sparkles className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-gray-900 mb-2">No sessions available</h3>
+            <p className="text-gray-600">
+              {sessions.length === 0 
+                ? 'Sessions will appear here once events are created with sessions'
+                : 'No sessions match your selected filter'}
+            </p>
+          </CardContent>
+        </Card>
+      ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {recommendedSessions.map((session) => (
-            <Card key={session.id} className="hover:shadow-lg transition-shadow">
+          {filteredSessions.map((session) => (
+            <Card key={session.id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-6">
                 <div className="flex items-start justify-between mb-3">
-                  <Badge className="bg-[#0F6AB4]/10 text-[#0F6AB4]">
-                    {session.track}
-                  </Badge>
-                  <div className="flex items-center gap-2">
-                    <div 
-                      className={`w-2 h-2 rounded-full ${getMatchColor(session.matchScore)}`}
-                    />
-                    <span className="text-sm">{session.matchScore}%</span>
-                  </div>
+                  <h3 className="text-gray-900 font-medium flex-1">{session.title}</h3>
+                  {session.matchScore && (
+                    <Badge className={`${getMatchColor(session.matchScore)} text-white text-xs`}>
+                      {session.matchScore}% match
+                    </Badge>
+                  )}
                 </div>
-
-                <h3 className="text-gray-900 mb-2">{session.title}</h3>
-                
-                <div className="space-y-2 text-sm text-gray-600 mb-4">
-                  <div className="flex items-center gap-2">
+                {session.speaker && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
                     <User className="w-4 h-4" />
                     <span>{session.speaker}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4" />
-                    <span>{session.time} • {session.duration} min</span>
+                )}
+                <div className="space-y-2 text-sm text-gray-600">
+                  {session.track && (
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs">{session.track}</Badge>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-4">
+                    {session.time && (
+                      <div className="flex items-center gap-1">
+                        <Clock className="w-4 h-4" />
+                        <span>{session.time}</span>
+                      </div>
+                    )}
+                    {session.room && (
+                      <div className="flex items-center gap-1">
+                        <MapPin className="w-4 h-4" />
+                        <span>{session.room}</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4" />
-                    <span>{session.room}</span>
+                  <div className="text-xs text-gray-500">
+                    Duration: {session.durationMin || session.duration} min
                   </div>
                 </div>
-
-                <Button className="w-full bg-[#28A9A1] hover:bg-[#229187]">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add to My Schedule
-                </Button>
               </CardContent>
             </Card>
           ))}
         </div>
       ) : (
         <div className="space-y-3">
-          {recommendedSessions.map((session) => (
+          {filteredSessions.map((session) => (
             <Card key={session.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-4">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="text-gray-900">{session.title}</h3>
-                      <Badge className="bg-[#0F6AB4]/10 text-[#0F6AB4]">
-                        {session.track}
-                      </Badge>
-                      <div className="flex items-center gap-2 ml-auto">
-                        <div 
-                          className={`w-2 h-2 rounded-full ${getMatchColor(session.matchScore)}`}
-                        />
-                        <span className="text-sm">{session.matchScore}% match</span>
-                      </div>
+                      {session.track && (
+                        <Badge variant="outline" className="text-xs">{session.track}</Badge>
+                      )}
+                      {session.matchScore && (
+                        <Badge className={`${getMatchColor(session.matchScore)} text-white text-xs`}>
+                          {session.matchScore}% match
+                        </Badge>
+                      )}
                     </div>
-                    <div className="flex items-center gap-6 text-sm text-gray-600">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4" />
-                        <span>{session.speaker}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4" />
-                        <span>{session.time} • {session.duration} min</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4" />
-                        <span>{session.room}</span>
-                      </div>
+                    {session.speaker && (
+                      <p className="text-sm text-gray-600 mb-2">{session.speaker}</p>
+                    )}
+                    <div className="flex items-center gap-4 text-sm text-gray-600">
+                      {session.time && (
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-4 h-4" />
+                          <span>{session.time}</span>
+                        </div>
+                      )}
+                      {session.room && (
+                        <div className="flex items-center gap-1">
+                          <MapPin className="w-4 h-4" />
+                          <span>{session.room}</span>
+                        </div>
+                      )}
+                      <span>{session.durationMin || session.duration} min</span>
                     </div>
                   </div>
-                  <Button className="bg-[#28A9A1] hover:bg-[#229187]">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add to Schedule
-                  </Button>
                 </div>
               </CardContent>
             </Card>
