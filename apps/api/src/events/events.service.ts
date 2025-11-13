@@ -24,6 +24,8 @@ export class EventsService {
 
   async create(dto: CreateEventDto) {
     this.logger.log(`Creating event with title: ${dto.title}`);
+    this.logger.log(`Received venueId: ${dto.venueId}, expectedAudience: ${dto.expectedAudience}`);
+    
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -36,10 +38,51 @@ export class EventsService {
         throw new BadRequestException('Organizer not found');
       }
 
-      // Validate venue if provided
-      let venue: Venue | undefined;
-      if (dto.venueId) {
-        venue = await this.venues.findOne(dto.venueId);
+      // Validate venue - REQUIRED
+      if (dto.venueId === undefined || dto.venueId === null || dto.venueId === 0) {
+        this.logger.warn('Event creation failed: No venue provided');
+        throw new BadRequestException('A venue is required to create an event. Please select a venue.');
+      }
+
+      const venue = await this.venues.findOne(dto.venueId);
+      if (!venue) {
+        this.logger.warn(`Event creation failed: Venue with ID ${dto.venueId} not found`);
+        throw new BadRequestException(`Venue with ID ${dto.venueId} not found`);
+      }
+
+      this.logger.log(`Venue found: ${venue.name} (capacity: ${venue.capacity})`);
+      this.logger.log(`Expected audience: ${dto.expectedAudience}`);
+
+      // Validate capacity - REQUIRED if expectedAudience is provided
+      if (dto.expectedAudience !== undefined && dto.expectedAudience !== null) {
+        if (dto.expectedAudience > venue.capacity) {
+          this.logger.warn(
+            `Event creation failed: Expected audience (${dto.expectedAudience}) exceeds venue capacity (${venue.capacity})`
+          );
+          throw new BadRequestException(
+            `Expected audience (${dto.expectedAudience}) exceeds venue capacity (${venue.capacity}). Please select a larger venue or reduce the expected audience.`
+          );
+        }
+      } else {
+        this.logger.warn('Event creation: expectedAudience not provided, skipping capacity validation');
+      }
+
+      // Check for date conflicts
+      const conflicts = await this.checkVenueAvailability(
+        dto.venueId,
+        dto.startDate,
+        dto.endDate,
+        null // No existing event ID for new events
+      );
+
+      if (conflicts.length > 0) {
+        const conflictDates = conflicts.map(c => c.startDate).join(', ');
+        this.logger.warn(
+          `Event creation failed: Venue ${venue.name} is already booked on ${conflictDates}`
+        );
+        throw new BadRequestException(
+          `Venue "${venue.name}" is already booked for the selected dates. Conflicting dates: ${conflictDates}`
+        );
       }
 
       // Create event
@@ -168,4 +211,31 @@ export class EventsService {
     }
     return event;
   }
+
+  private async checkVenueAvailability(
+  venueId: number,
+  startDate: string,
+  endDate: string,
+  excludeEventId: number | null = null
+): Promise<Event[]> {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  
+  // Build query to find overlapping events
+  const query = this.eventRepo
+    .createQueryBuilder('event')
+    .where('event.venueId = :venueId', { venueId })
+    .andWhere(
+      // Events that overlap: startDate <= end AND endDate >= start
+      '(event.startDate <= :end AND event.endDate >= :start)',
+      { start: startDate, end: endDate }
+    );
+
+  // Exclude current event if updating
+  if (excludeEventId) {
+    query.andWhere('event.id != :excludeEventId', { excludeEventId });
+  }
+
+  return await query.getMany();
+}
 }

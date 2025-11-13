@@ -18,7 +18,14 @@ export class AiService {
     try {
       const res = await firstValueFrom(this.http.post('/parse-brief', dto));
       this.logger.log('Successfully parsed brief from AI service');
-      return res.data as { estimatedAudience?: number; budgetLkr?: number; tracks?: number };
+      const data = res.data as { 
+        estimatedAudience?: number; 
+        budgetLkr?: number; 
+        tracks?: number;
+        title?: string;
+      };
+      this.logger.log(`AI parsed - estimatedAudience: ${data.estimatedAudience}, budgetLkr: ${data.budgetLkr}, title: ${data.title}`);
+      return data;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error.stack : undefined;

@@ -40,7 +40,14 @@ export class EventsController {
     if (dto.brief) {
       try {
         const parsed = await this.ai.parseBrief({ text: dto.brief });
-        dto.expectedAudience = dto.expectedAudience ?? parsed?.estimatedAudience ?? undefined;
+        console.log('AI parsed result:', JSON.stringify(parsed, null, 2));
+        console.log('DTO before merge - expectedAudience:', dto.expectedAudience);
+        
+        // Use AI parsed value if not already provided
+        if (!dto.expectedAudience && parsed?.estimatedAudience) {
+          dto.expectedAudience = parsed.estimatedAudience;
+        }
+        
         if (!dto.budget && parsed?.budgetLkr) {
           dto.budget = String(parsed.budgetLkr);
         }
@@ -55,6 +62,8 @@ export class EventsController {
         console.warn(`AI parsing failed (non-fatal): ${errorMessage}`);
       }
     }
+    
+    console.log('Final DTO before service - expectedAudience:', dto.expectedAudience, 'venueId:', dto.venueId);
     return this.events.create(dto);
   }
 }

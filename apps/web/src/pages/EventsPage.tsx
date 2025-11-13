@@ -210,13 +210,23 @@ export function EventsPage() {
       return;
     }
 
+    // Debug: log what we're sending
+    console.log('Creating event with:', {
+      expectedAudience: eventDetails.expectedAudience,
+      venueId: selectedVenue?.id,
+      brief: eventDetails.brief,
+    });
+
     try {
       await createEvent({
         organizerId: userId,
         title: eventDetails.name,
         startDate: eventDetails.startDate,
         endDate: eventDetails.endDate,
-        expectedAudience: eventDetails.expectedAudience ? parseInt(eventDetails.expectedAudience) : undefined,
+        // Ensure we send the number, not undefined
+        expectedAudience: eventDetails.expectedAudience 
+          ? parseInt(eventDetails.expectedAudience, 10) 
+          : undefined,
         budget: eventDetails.budget || undefined,
         venueId: selectedVenue?.id,
         brief: eventDetails.brief || undefined,

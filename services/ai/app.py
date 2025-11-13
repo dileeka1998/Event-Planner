@@ -186,8 +186,14 @@ def parse_brief(b: Brief):
         title = extract_and_clean_title(text, doc)
 
         # Extract audience - look for numbers near audience-related words
-        audience_pattern = r'\b(\d{1,6}(?:,\d{3})*)\s*(?:people|attendees?|participants?|guests?|delegates?|visitors?)\b'
-        audience_words = ['people', 'attendees', 'attendee', 'participants', 'participant', 'guests', 'guest', 'delegates', 'visitors']
+        audience_pattern = r'\b(\d{1,6}(?:,\d{3})*)\s*(?:people|attendees?|participants?|guests?|delegates?|visitors?|programmers?|developers?|users?|members?|attendees?)\b'
+        audience_words = [
+            'people', 'attendees', 'attendee', 'participants', 'participant', 
+            'guests', 'guest', 'delegates', 'visitors', 'visitor',
+            'programmers', 'programmer', 'developers', 'developer',
+            'users', 'user', 'members', 'member',
+            'audience', 'crowd', 'attendance'
+        ]
 
         # Try regex pattern first
         audience_match = re.search(audience_pattern, low)

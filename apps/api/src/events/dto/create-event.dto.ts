@@ -60,17 +60,17 @@ export class CreateEventDto {
   @ApiPropertyOptional({ description: 'The expected number of attendees' })
   @IsNumber()
   @IsOptional()
-  expectedAudience?: number;
+  expectedAudience!: number;
 
   @ApiPropertyOptional({ description: 'The budget for the event in LKR' })
   @IsString()
   @IsOptional()
   budget?: string;
 
-  @ApiPropertyOptional({ description: 'The ID of the venue' })
+  @ApiProperty({ description: 'The ID of the venue (required)' })
   @IsNumber()
-  @IsOptional()
-  venueId?: number;
+  @IsNotEmpty()
+  venueId!: number;
 
   @ApiPropertyOptional({ description: 'A natural language brief of the event for AI processing' })
   @IsString()
