@@ -8,7 +8,12 @@ export class AiService {
 
   constructor(private http: HttpService) {}
 
-  async parseBrief(dto: { text: string }) {
+  async parseBrief(dto: { text: string }): Promise<{
+    estimatedAudience?: number;
+    budgetLkr?: number;
+    tracks?: number;
+    title?: string;
+  }> {
     this.logger.log('Sending brief to AI service for parsing');
     try {
       const res = await firstValueFrom(this.http.post('/parse-brief', dto));

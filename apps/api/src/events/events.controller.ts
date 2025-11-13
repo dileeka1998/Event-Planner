@@ -44,6 +44,10 @@ export class EventsController {
         if (!dto.budget && parsed?.budgetLkr) {
           dto.budget = String(parsed.budgetLkr);
         }
+        // Use AI-extracted title if available and title not already set
+        if (!dto.title && parsed?.title) {
+          dto.title = parsed.title;
+        }
       } catch (error: unknown) {
         // The AI service is optional, so we don't rethrow the error.
         // The logger in the AiService will have already logged the failure.
