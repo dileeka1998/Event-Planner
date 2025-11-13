@@ -1,4 +1,3 @@
-
 import axios from 'axios';
 
 const api = axios.create({
@@ -18,27 +17,76 @@ api.interceptors.request.use((config) => {
 });
 
 // Auth
-export const signup = (data: any) => api.post('/auth/signup', data);
-export const login = (data: any) => api.post('/auth/login', data);
+export const signup = (data: { email: string; name: string; password: string }) =>
+  api.post('/auth/signup', data);
+
+export const login = (data: { email: string; password: string }) =>
+  api.post('/auth/login', data);
 
 // Events
-export const createEvent = (data: any) => api.post('/events', data);
 export const getEvents = () => api.get('/events');
+
 export const getEvent = (id: number) => api.get(`/events/${id}`);
+
+export const createEvent = (data: {
+  organizerId: number;
+  title: string;
+  startDate: string;
+  endDate: string;
+  expectedAudience?: number;
+  budget?: string;
+  venueId?: number;
+  brief?: string;
+  budgetItems?: Array<{
+    category: string;
+    description?: string;
+    estimatedAmount: string;
+    actualAmount?: string;
+    quantity?: number;
+    unit?: string;
+    vendor?: string;
+  }>;
+}) => api.post('/events', data);
 
 // Venues
 export const getVenues = () => api.get('/venues');
+
 export const getVenue = (id: number) => api.get(`/venues/${id}`);
-export const createVenue = (data: any) => api.post('/venues', data);
-export const updateVenue = (id: number, data: any) => api.put(`/venues/${id}`, data);
+
+export const createVenue = (data: {
+  name: string;
+  address: string;
+  capacity: number;
+  contactName?: string;
+  contactPhone?: string;
+  hourlyRate?: string;
+  notes?: string;
+}) => api.post('/venues', data);
+
+export const updateVenue = (id: number, data: Partial<{
+  name: string;
+  address: string;
+  capacity: number;
+  contactName?: string;
+  contactPhone?: string;
+  hourlyRate?: string;
+  notes?: string;
+}>) => api.put(`/venues/${id}`, data);
+
 export const deleteVenue = (id: number) => api.delete(`/venues/${id}`);
 
 // Attendees
-export const registerAttendee = (eventId: number) => api.post(`/events/${eventId}/attendees`);
-export const leaveEvent = (eventId: number) => api.delete(`/events/${eventId}/attendees/me`);
 export const getEventAttendees = (eventId: number) => api.get(`/events/${eventId}/attendees`);
 
+export const registerAttendee = (eventId: number) => api.post(`/events/${eventId}/attendees`);
+
+export const leaveEvent = (eventId: number) => api.delete(`/events/${eventId}/attendees/me`);
+
+// Users (for admin panel)
+export const getUsers = () => api.get('/users');
+
 // AI
-export const parseBrief = (data: any) => aiApi.post('/parse-brief', data);
+export const parseBrief = (data: { text: string }) => aiApi.post('/parse-brief', data);
 
 export default api;
+

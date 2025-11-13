@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { Sidebar } from './Sidebar';
 import { TopNavbar } from './TopNavbar';
 import { User } from '../../types';
+import { Toaster } from '../ui/sonner';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -36,6 +37,7 @@ export function DashboardLayout({
           {children}
         </main>
       </div>
+      <Toaster />
     </div>
   );
 }

@@ -1,30 +1,142 @@
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Alert, AlertDescription } from '../components/ui/alert';
-import { AlertTriangle, TrendingDown, TrendingUp } from 'lucide-react';
+import { TrendingDown, TrendingUp, DollarSign, Loader2 } from 'lucide-react';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '../components/ui/chart';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Legend } from 'recharts';
+import { BudgetLineTable } from '../components/budget/BudgetLineTable';
+import { BudgetLineItem } from '../types';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Label } from '../components/ui/label';
+import { toast } from 'sonner';
+import { KPICard } from '../components/dashboard/KPICard';
+import { getEvent, getEvents } from '../api';
+import { Event } from '../types';
 
 export function BudgetPage() {
-  const categoryData = [
-    { name: 'Rooms', value: 45000, color: '#0F6AB4' },
-    { name: 'Resources', value: 35000, color: '#28A9A1' },
-    { name: 'Speakers', value: 25000, color: '#8B5CF6' },
-    { name: 'Other', value: 15000, color: '#F9B233' },
-  ];
+  const [lineItems, setLineItems] = useState<BudgetLineItem[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const comparisonData = [
-    { category: 'Venue', planned: 50000, actual: 45000 },
-    { category: 'Catering', planned: 30000, actual: 35000 },
-    { category: 'Technology', planned: 25000, actual: 25000 },
-    { category: 'Marketing', planned: 20000, actual: 18000 },
-    { category: 'Staff', planned: 15000, actual: 17000 },
-  ];
+  useEffect(() => {
+    fetchEvents();
+  }, []);
 
-  const totalPlanned = 140000;
-  const totalActual = 120000;
-  const remaining = totalPlanned - totalActual;
-  const utilizationPercent = (totalActual / totalPlanned * 100).toFixed(1);
-  const isOverBudget = totalActual > totalPlanned;
+  useEffect(() => {
+    if (selectedEventId) {
+      fetchBudget(selectedEventId);
+    } else {
+      setLineItems([]);
+    }
+  }, [selectedEventId]);
+
+  const fetchEvents = async () => {
+    try {
+      const { data } = await getEvents();
+      setEvents(data);
+      if (data.length > 0 && !selectedEventId) {
+        setSelectedEventId(data[0].id);
+      }
+    } catch (error: any) {
+      toast.error('Failed to fetch events');
+      console.error(error);
+    }
+  };
+
+  const fetchBudget = async (eventId: number) => {
+    setLoading(true);
+    try {
+      const { data } = await getEvent(eventId);
+      if (data.eventBudget?.items) {
+        setLineItems(data.eventBudget.items.map((item: any) => ({
+          id: item.id,
+          category: item.category,
+          description: item.description || '',
+          quantity: item.quantity || 1,
+          unit: item.unit || '',
+          estimatedCost: parseFloat(item.estimatedAmount || '0'),
+          actualCost: parseFloat(item.actualAmount || '0'),
+          vendor: item.vendor || '',
+          status: item.status === 'PLANNED' ? 'Planned' : 
+                 item.status === 'APPROVED' ? 'Pending' :
+                 item.status === 'PURCHASED' ? 'Pending' :
+                 item.status === 'PAID' ? 'Paid' : 'Planned',
+        })));
+      } else {
+        setLineItems([]);
+      }
+    } catch (error: any) {
+      toast.error('Failed to fetch budget');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddItem = (item: Omit<BudgetLineItem, 'id'>) => {
+    // Note: This would need a backend endpoint to add budget items
+    toast.info('Budget item addition requires backend support');
+  };
+
+  const handleUpdateItem = (id: number, updates: Partial<BudgetLineItem>) => {
+    // Note: This would need a backend endpoint to update budget items
+    toast.info('Budget item update requires backend support');
+  };
+
+  const handleDeleteItem = (id: number) => {
+    // Note: This would need a backend endpoint to delete budget items
+    toast.info('Budget item deletion requires backend support');
+  };
+
+  const totalEstimated = lineItems.reduce((sum, item) => sum + (item.estimatedCost || 0), 0);
+  const totalActual = lineItems.reduce((sum, item) => sum + (item.actualCost || 0), 0);
+  const remaining = totalEstimated - totalActual;
+  const utilizationPercent = totalEstimated > 0 ? (totalActual / totalEstimated * 100).toFixed(1) : '0';
+  const variance = totalEstimated > 0 ? (((totalEstimated - totalActual) / totalEstimated) * 100).toFixed(1) : '0';
+
+  const categoryData = lineItems.reduce((acc, item) => {
+    const existing = acc.find(a => a.name === item.category);
+    if (existing) {
+      existing.value += item.actualCost || item.estimatedCost || 0;
+    } else {
+      acc.push({
+        name: item.category,
+        value: item.actualCost || item.estimatedCost || 0,
+        color: getCategoryColor(item.category),
+      });
+    }
+    return acc;
+  }, [] as { name: string; value: number; color: string }[]);
+
+  const comparisonData = lineItems.reduce((acc, item) => {
+    const existing = acc.find(a => a.category === item.category);
+    if (existing) {
+      existing.planned += item.estimatedCost || 0;
+      existing.actual += item.actualCost || 0;
+    } else {
+      acc.push({
+        category: item.category,
+        planned: item.estimatedCost || 0,
+        actual: item.actualCost || 0,
+      });
+    }
+    return acc;
+  }, [] as { category: string; planned: number; actual: number }[]);
+
+  function getCategoryColor(category: string): string {
+    const colors: Record<string, string> = {
+      'Venue': '#0F6AB4',
+      'Catering': '#28A9A1',
+      'Technology': '#8B5CF6',
+      'Audio/Visual': '#8B5CF6',
+      'Marketing': '#F9B233',
+      'Staff': '#10B981',
+      'Miscellaneous': '#6B7280',
+      'Other': '#6B7280',
+    };
+    return colors[category] || '#6B7280';
+  }
 
   return (
     <div className="space-y-6">
@@ -33,168 +145,200 @@ export function BudgetPage() {
         <p className="text-gray-600">Track and manage event expenses</p>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {events.length > 0 && (
         <Card>
-          <CardContent className="p-6">
-            <p className="text-sm text-gray-600 mb-1">Total Budget</p>
-            <h3 className="text-gray-900">LKR {totalPlanned.toLocaleString()}</h3>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <p className="text-sm text-gray-600 mb-1">Actual Cost</p>
-            <h3 className="text-gray-900">LKR {totalActual.toLocaleString()}</h3>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <p className="text-sm text-gray-600 mb-1">Remaining</p>
-            <h3 className="text-green-600">LKR {remaining.toLocaleString()}</h3>
-            <div className="flex items-center gap-1 mt-1">
-              <TrendingDown className="w-4 h-4 text-green-600" />
-              <span className="text-xs text-green-600">14% under budget</span>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-4">
+              <Label htmlFor="event-select">Select Event:</Label>
+              <Select 
+                value={selectedEventId?.toString() || ''} 
+                onValueChange={(value) => setSelectedEventId(parseInt(value))}
+              >
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="Select an event" />
+                </SelectTrigger>
+                <SelectContent>
+                  {events.map((event) => (
+                    <SelectItem key={event.id} value={event.id.toString()}>
+                      {event.title || event.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-6">
-            <p className="text-sm text-gray-600 mb-1">Utilization</p>
-            <h3 className="text-gray-900">{utilizationPercent}%</h3>
-            <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-              <div 
-                className="bg-[#28A9A1] h-2 rounded-full"
-                style={{ width: `${utilizationPercent}%` }}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      )}
 
-      {/* Alert for budget status */}
-      <Alert className="border-green-200 bg-green-50">
-        <TrendingDown className="w-4 h-4 text-green-600" />
-        <AlertDescription className="text-green-800">
-          ✅ Budget is on track - you're under budget by LKR {remaining.toLocaleString()} ({(100 - parseFloat(utilizationPercent)).toFixed(1)}%)
-        </AlertDescription>
-      </Alert>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Donut Chart - Cost by Category */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Cost Breakdown by Category</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer
-              config={{
-                value: {
-                  label: "Amount",
-                  color: "#0F6AB4",
-                },
-              }}
-              className="h-80"
-            >
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={categoryData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {categoryData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                </PieChart>
-              </ResponsiveContainer>
-            </ChartContainer>
-            <div className="grid grid-cols-2 gap-3 mt-4">
-              {categoryData.map((item) => (
-                <div key={item.name} className="flex items-center gap-2">
-                  <div 
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span className="text-sm text-gray-600">{item.name}</span>
-                  <span className="text-sm ml-auto">LKR {item.value.toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Bar Chart - Planned vs Actual */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Planned vs Actual Budget</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer
-              config={{
-                planned: {
-                  label: "Planned",
-                  color: "#0F6AB4",
-                },
-                actual: {
-                  label: "Actual",
-                  color: "#28A9A1",
-                },
-              }}
-              className="h-80"
-            >
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={comparisonData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="category" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Legend />
-                  <Bar dataKey="planned" fill="#0F6AB4" name="Planned" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="actual" fill="#28A9A1" name="Actual" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Detailed Cost Items */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Detailed Cost Items</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {comparisonData.map((item) => {
-              const diff = item.actual - item.planned;
-              const isOver = diff > 0;
-              return (
-                <div key={item.category} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div className="flex-1">
-                    <h4 className="text-gray-900 mb-1">{item.category}</h4>
-                    <div className="flex items-center gap-4 text-sm text-gray-600">
-                      <span>Planned: LKR {item.planned.toLocaleString()}</span>
-                      <span>Actual: LKR {item.actual.toLocaleString()}</span>
-                    </div>
-                  </div>
-                  <div className={`flex items-center gap-1 ${isOver ? 'text-red-600' : 'text-green-600'}`}>
-                    {isOver ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                    <span className="text-sm">
-                      {isOver ? '+' : ''}{diff.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+      {selectedEventId && (
+        <>
+          {/* KPI Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <KPICard 
+              title="Total Estimated"
+              value={`LKR ${totalEstimated.toLocaleString()}`}
+              icon={DollarSign}
+              color="#0F6AB4"
+            />
+            <KPICard 
+              title="Total Actual"
+              value={`LKR ${totalActual.toLocaleString()}`}
+              icon={DollarSign}
+              color="#28A9A1"
+            />
+            <KPICard 
+              title="Remaining"
+              value={`LKR ${remaining.toLocaleString()}`}
+              icon={DollarSign}
+              color="#10B981"
+              trend={`${variance}% ${parseFloat(variance) > 0 ? 'under' : 'over'} budget`}
+            />
+            <KPICard 
+              title="Utilization"
+              value={`${utilizationPercent}%`}
+              icon={DollarSign}
+              color="#F9B233"
+              showProgress
+              progressValue={parseFloat(utilizationPercent)}
+            />
           </div>
-        </CardContent>
-      </Card>
+
+          {/* Alert for budget status */}
+          {remaining >= 0 ? (
+            <Alert className="border-green-200 bg-green-50">
+              <TrendingDown className="w-4 h-4 text-green-600" />
+              <AlertDescription className="text-green-800">
+                ✅ Budget is on track - you're under budget by LKR {remaining.toLocaleString()} ({variance}%)
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Alert className="border-red-200 bg-red-50">
+              <TrendingUp className="w-4 h-4 text-red-600" />
+              <AlertDescription className="text-red-800">
+                ⚠️ Budget exceeded - you're over budget by LKR {Math.abs(remaining).toLocaleString()} ({Math.abs(parseFloat(variance))}%)
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Line Items Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Budget Line Items</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+                </div>
+              ) : (
+                <BudgetLineTable 
+                  items={lineItems}
+                  onAddItem={handleAddItem}
+                  onUpdateItem={handleUpdateItem}
+                  onDeleteItem={handleDeleteItem}
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          {lineItems.length > 0 && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Donut Chart - Cost by Category */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Cost Breakdown by Category</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ChartContainer
+                    config={{
+                      value: {
+                        label: "Amount",
+                        color: "#0F6AB4",
+                      },
+                    }}
+                    className="h-80"
+                  >
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={categoryData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={100}
+                          paddingAngle={5}
+                          dataKey="value"
+                        >
+                          {categoryData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </ChartContainer>
+                  <div className="grid grid-cols-2 gap-3 mt-4">
+                    {categoryData.map((item) => (
+                      <div key={item.name} className="flex items-center gap-2">
+                        <div 
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: item.color }}
+                        />
+                        <span className="text-sm text-gray-600">{item.name}</span>
+                        <span className="text-sm ml-auto">LKR {item.value.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Bar Chart - Planned vs Actual */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Estimated vs Actual Budget</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ChartContainer
+                    config={{
+                      planned: {
+                        label: "Estimated",
+                        color: "#0F6AB4",
+                      },
+                      actual: {
+                        label: "Actual",
+                        color: "#28A9A1",
+                      },
+                    }}
+                    className="h-80"
+                  >
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={comparisonData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis dataKey="category" tick={{ fontSize: 12 }} />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Legend />
+                        <Bar dataKey="planned" fill="#0F6AB4" name="Estimated" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="actual" fill="#28A9A1" name="Actual" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </ChartContainer>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </>
+      )}
+
+      {!selectedEventId && events.length === 0 && (
+        <Card>
+          <CardContent className="p-12 text-center">
+            <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-gray-900 mb-2">No events available</h3>
+            <p className="text-gray-600">Create an event first to view its budget</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

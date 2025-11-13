@@ -6,7 +6,9 @@ import {
   Lightbulb, 
   DollarSign, 
   CheckSquare, 
-  Settings 
+  Settings,
+  MapPin,
+  UserCheck
 } from 'lucide-react';
 import { cn } from '../ui/utils';
 
@@ -20,12 +22,15 @@ export function Sidebar({ currentPage, onNavigate, userRole }: SidebarProps) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Admin', 'Organizer', 'Attendee'] },
     { id: 'events', label: 'Events', icon: Calendar, roles: ['Admin', 'Organizer'] },
+    { id: 'venues', label: 'Venues', icon: MapPin, roles: ['Admin', 'Organizer'] },
     { id: 'speakers', label: 'Speakers & Sessions', icon: Users, roles: ['Organizer'] },
-    { id: 'scheduler', label: 'Timetable (AI Scheduler)', icon: Clock, roles: ['Organizer'] },
-    { id: 'recommendations', label: 'Recommendations', icon: Lightbulb, roles: ['Attendee'] },
+    { id: 'scheduler', label: 'AI Scheduler', icon: Clock, roles: ['Organizer'] },
     { id: 'budget', label: 'Budget Overview', icon: DollarSign, roles: ['Organizer'] },
-    { id: 'rsvp', label: 'RSVPs', icon: CheckSquare, roles: ['Organizer', 'Attendee'] },
+    { id: 'attendees', label: 'Attendees', icon: UserCheck, roles: ['Admin', 'Organizer'] },
+    { id: 'recommendations', label: 'Recommendations', icon: Lightbulb, roles: ['Attendee'] },
+    { id: 'rsvp', label: 'My Events', icon: CheckSquare, roles: ['Attendee'] },
     { id: 'admin', label: 'Admin Panel', icon: Settings, roles: ['Admin'] },
+    { id: 'team', label: 'Team', icon: Users, roles: ['Admin', 'Organizer', 'Attendee'] },
   ];
 
   const filteredMenuItems = menuItems.filter(item => item.roles.includes(userRole));

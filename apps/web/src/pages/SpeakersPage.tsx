@@ -1,40 +1,46 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Plus, Upload } from 'lucide-react';
-import { Session } from '../types';
+import { Plus, Upload, Loader2 } from 'lucide-react';
+import { Session, Event } from '../types';
+import { getEvents } from '../api';
+import { toast } from 'sonner';
 
 export function SpeakersPage() {
-  const [sessions] = useState<Session[]>([
-    { 
-      id: '1', 
-      title: 'AI in Modern Applications', 
-      speaker: 'Dr. Sarah Chen', 
-      track: 'Technology',
-      duration: 60,
-      expectedAudience: 150
-    },
-    { 
-      id: '2', 
-      title: 'Future of Web Development', 
-      speaker: 'John Martinez', 
-      track: 'Development',
-      duration: 45,
-      expectedAudience: 120
-    },
-    { 
-      id: '3', 
-      title: 'Cloud Architecture Patterns', 
-      speaker: 'Emily Watson', 
-      track: 'Technology',
-      duration: 90,
-      expectedAudience: 80
-    },
-  ]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchSessions();
+  }, []);
+
+  const fetchSessions = async () => {
+    setLoading(true);
+    try {
+      const { data: events } = await getEvents();
+      const allSessions: Session[] = [];
+      events.forEach((event: Event) => {
+        if (event.sessions) {
+          allSessions.push(...event.sessions.map((s: any) => ({
+            ...s,
+            track: s.track || 'General',
+            expectedAudience: event.expectedAudience,
+            duration: s.durationMin,
+          })));
+        }
+      });
+      setSessions(allSessions);
+    } catch (error: any) {
+      toast.error('Failed to fetch sessions');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -96,36 +102,46 @@ export function SpeakersPage() {
           <CardTitle>Session List</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Title</TableHead>
-                <TableHead>Speaker</TableHead>
-                <TableHead>Track</TableHead>
-                <TableHead>Duration</TableHead>
-                <TableHead>Expected Audience</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sessions.map((session) => (
-                <TableRow key={session.id}>
-                  <TableCell>{session.title}</TableCell>
-                  <TableCell>{session.speaker}</TableCell>
-                  <TableCell>
-                    <span className="px-2 py-1 bg-[#0F6AB4]/10 text-[#0F6AB4] rounded text-xs">
-                      {session.track}
-                    </span>
-                  </TableCell>
-                  <TableCell>{session.duration} min</TableCell>
-                  <TableCell>{session.expectedAudience}</TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="sm">Edit</Button>
-                  </TableCell>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+            </div>
+          ) : sessions.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <p>No sessions found. Sessions will appear here once events are created with sessions.</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Speaker</TableHead>
+                  <TableHead>Track</TableHead>
+                  <TableHead>Duration</TableHead>
+                  <TableHead>Expected Audience</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {sessions.map((session) => (
+                  <TableRow key={session.id}>
+                    <TableCell>{session.title}</TableCell>
+                    <TableCell>{session.speaker || '-'}</TableCell>
+                    <TableCell>
+                      <span className="px-2 py-1 bg-[#0F6AB4]/10 text-[#0F6AB4] rounded text-xs">
+                        {session.track || 'General'}
+                      </span>
+                    </TableCell>
+                    <TableCell>{session.durationMin || session.duration} min</TableCell>
+                    <TableCell>{session.expectedAudience || '-'}</TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="sm">Edit</Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>
