@@ -1,6 +1,43 @@
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsDateString, IsNumber, IsOptional, IsNotEmpty } from 'class-validator';
+import { IsString, IsDateString, IsNumber, IsOptional, IsNotEmpty, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class BudgetItemDto {
+  @ApiProperty({ description: 'Category of the budget item' })
+  @IsString()
+  @IsNotEmpty()
+  category!: string;
+
+  @ApiPropertyOptional({ description: 'Description of the budget item' })
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @ApiProperty({ description: 'Estimated amount in LKR' })
+  @IsString()
+  estimatedAmount!: string;
+
+  @ApiPropertyOptional({ description: 'Actual amount in LKR', default: '0' })
+  @IsString()
+  @IsOptional()
+  actualAmount?: string;
+
+  @ApiPropertyOptional({ description: 'Quantity', default: 1 })
+  @IsNumber()
+  @IsOptional()
+  quantity?: number;
+
+  @ApiPropertyOptional({ description: 'Unit of measurement' })
+  @IsString()
+  @IsOptional()
+  unit?: string;
+
+  @ApiPropertyOptional({ description: 'Vendor name' })
+  @IsString()
+  @IsOptional()
+  vendor?: string;
+}
 
 export class CreateEventDto {
   @ApiProperty({ description: 'The ID of the user organizing the event' })
@@ -30,8 +67,20 @@ export class CreateEventDto {
   @IsOptional()
   budget?: string;
 
+  @ApiPropertyOptional({ description: 'The ID of the venue' })
+  @IsNumber()
+  @IsOptional()
+  venueId?: number;
+
   @ApiPropertyOptional({ description: 'A natural language brief of the event for AI processing' })
   @IsString()
   @IsOptional()
   brief?: string;
+
+  @ApiPropertyOptional({ description: 'Budget items for the event', type: [BudgetItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BudgetItemDto)
+  @IsOptional()
+  budgetItems?: BudgetItemDto[];
 }

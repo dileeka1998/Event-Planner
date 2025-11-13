@@ -21,14 +21,17 @@ export default function App() {
 
   useEffect(() => {
     const checkUser = async () => {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('app_token');
       if (token) {
+        // Token exists, but we don't have a /users/me endpoint yet
+        // For now, we'll just set a basic user or clear token if invalid
         try {
-          const { data } = await api.get('/users/me');
-          setUser(data);
+          // Try to decode token or validate it by making a simple request
+          // For now, we'll just keep the user state from login
+          // In a real app, you'd decode the JWT or call /users/me
         } catch (error) {
-          console.error("Failed to fetch user", error);
-          localStorage.removeItem('token');
+          console.error("Failed to validate token", error);
+          localStorage.removeItem('app_token');
         }
       }
       setLoading(false);
@@ -39,17 +42,18 @@ export default function App() {
   const handleLogin = async (credentials: any) => {
     try {
       const { data } = await apiLogin(credentials);
-      localStorage.setItem('token', data.token);
+      localStorage.setItem('app_token', data.token);
       setUser(data.user);
       setCurrentPage('dashboard');
     } catch (error) {
       console.error('Login failed', error);
       // You might want to show an error to the user
+      throw error; // Re-throw so LoginPage can handle it
     }
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
+    localStorage.removeItem('app_token');
     setUser(null);
     setCurrentPage('dashboard');
   };
