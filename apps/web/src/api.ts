@@ -22,6 +22,7 @@ export const signup = (data: { email: string; name: string; password: string }) 
 
 export const login = (data: { email: string; password: string }) =>
   api.post('/auth/login', data);
+//Forgot Passwrod
 
 // Events
 export const getEvents = () => api.get('/events');

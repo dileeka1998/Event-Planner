@@ -11,9 +11,10 @@ import { toast } from 'sonner';
 
 interface LoginPageProps {
   onLogin: (user: User, token: string) => void;
+  onForgotPassword: () => void;
 }
 
-export function LoginPage({ onLogin }: LoginPageProps) {
+export function LoginPage({ onLogin, onForgotPassword }: LoginPageProps) {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [regName, setRegName] = useState('');
@@ -150,7 +151,14 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                   </Button>
 
                   <p className="text-center text-sm text-gray-600">
-                    Forgot your password? <a href="#" className="text-[#0F6AB4] hover:underline">Reset it</a>
+                    Forgot your password?{' '}
+                    <button
+                      type="button"
+                      onClick={onForgotPassword}
+                      className="text-[#0F6AB4] hover:underline cursor-pointer"
+                    >
+                      Reset it
+                    </button>
                   </p>
                 </form>
               </TabsContent>

@@ -10,4 +10,6 @@ export class User {
   @Column() passwordHash!: string;
   @Column({ type: 'enum', enum: UserRole, default: UserRole.ATTENDEE }) role!: UserRole;
   @CreateDateColumn() createdAt!: Date;
+  @Column({ nullable: true }) resetToken?: string;
+  @Column({ type: 'datetime', nullable: true }) resetTokenExpiry?: Date;
 }
