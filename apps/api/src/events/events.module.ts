@@ -11,6 +11,8 @@ import { EventsService } from './events.service';
 import { EventsController } from './events.controller';
 import { AttendeesService } from './attendees.service';
 import { AttendeesController, AttendeesRecommendationsController } from './attendees.controller';
+import { SessionsService } from './sessions.service';
+import { SessionsController } from './sessions.controller';
 import { UsersModule } from '@users/users.module';
 import { User } from '@users/user.entity';
 import { AiModule } from '../ai/ai.module';
@@ -23,8 +25,8 @@ import { VenuesModule } from '../venues/venues.module';
     AiModule,
     VenuesModule,
   ],
-  providers: [EventsService, AttendeesService],
-  controllers: [EventsController, AttendeesController, AttendeesRecommendationsController],
+  providers: [EventsService, AttendeesService, SessionsService],
+  controllers: [EventsController, AttendeesController, AttendeesRecommendationsController, SessionsController],
   exports: [EventsService],
 })
 export class EventsModule {}

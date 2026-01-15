@@ -210,7 +210,8 @@ export class AttendeesService {
 
     // Process sessions with topic and day information
     const processedSessions = allSessions.map((session) => {
-      const topic = this.extractTopicFromTitle(session.title);
+      // Use stored topic if available, otherwise extract from title
+      const topic = session.topic || this.extractTopicFromTitle(session.title);
       const dayInfo = this.calculateDayInfo(session.startTime, session.event.startDate);
 
       this.logger.debug(`Processing session ${session.id}: title="${session.title}", topic="${topic}", dayInfo=${JSON.stringify(dayInfo)}`);

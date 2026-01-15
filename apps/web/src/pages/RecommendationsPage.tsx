@@ -7,6 +7,7 @@ import { Clock, MapPin, User, Grid3x3, List, Sparkles } from 'lucide-react';
 import { Session } from '../types';
 import { getRecommendedSessions } from '../api';
 import { toast } from 'sonner';
+import { SESSION_TOPICS } from '../constants/topics';
 
 export function RecommendationsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -72,7 +73,7 @@ export function RecommendationsPage() {
   };
 
   // Extract unique values for filter dropdowns from all sessions
-  const uniqueTopics = Array.from(new Set(allSessions.map(s => s.topic).filter(Boolean)));
+  // Use predefined topics list to ensure consistency with session creation
   const uniqueDays = Array.from(new Set(
     allSessions
       .map(s => s.dayNumber || s.dayOfWeek)
@@ -96,7 +97,7 @@ export function RecommendationsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Topics</SelectItem>
-            {uniqueTopics.map(topic => (
+            {SESSION_TOPICS.map(topic => (
               <SelectItem key={topic} value={topic}>{topic}</SelectItem>
             ))}
           </SelectContent>
