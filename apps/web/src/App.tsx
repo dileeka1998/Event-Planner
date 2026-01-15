@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { DashboardLayout } from './components/layout/DashboardLayout';
 import { LoginPage } from './pages/LoginPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OrganizerDashboard } from './pages/OrganizerDashboard';
 import { EventsPage } from './pages/EventsPage';
 import { SpeakersPage } from './pages/SpeakersPage';
@@ -14,6 +16,7 @@ import { VenuesPage } from './pages/VenuesPage';
 import { AttendeesPage } from './pages/AttendeesPage';
 import { TeamPage } from './pages/TeamPage';
 import { User } from './types';
+import { toast } from 'sonner';
 
 // Simple JWT decode (without verification - just for getting user info)
 function decodeJWT(token: string): any {
@@ -37,6 +40,8 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authView, setAuthView] = useState<'login' | 'forgot-password' | 'reset-password'>('login');
+  const [resetToken, setResetToken] = useState<string>('');
 
   useEffect(() => {
     const token = localStorage.getItem('app_token');
@@ -55,6 +60,15 @@ export default function App() {
         localStorage.removeItem('app_token');
       }
     }
+    
+    // Check for reset token in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenParam = urlParams.get('token');
+    if (tokenParam) {
+      setResetToken(tokenParam);
+      setAuthView('reset-password');
+    }
+    
     setLoading(false);
   }, []);
 
@@ -84,7 +98,40 @@ export default function App() {
   }
 
   if (!isAuthenticated || !currentUser) {
-    return <LoginPage onLogin={handleLogin} />;
+    if (authView === 'forgot-password') {
+      return (
+        <ForgotPasswordPage
+          onBack={() => setAuthView('login')}
+          onResetRequested={(token) => {
+            setResetToken(token);
+            setAuthView('reset-password');
+            // Update URL with token
+            window.history.pushState({}, '', `?token=${token}`);
+          }}
+        />
+      );
+    }
+
+    if (authView === 'reset-password') {
+      return (
+        <ResetPasswordPage
+          token={resetToken}
+          onBack={() => {
+            setAuthView('login');
+            setResetToken('');
+            window.history.pushState({}, '', '/');
+          }}
+          onPasswordReset={() => {
+            setAuthView('login');
+            setResetToken('');
+            window.history.pushState({}, '', '/');
+            toast.success('Password reset successful! Please login with your new password.');
+          }}
+        />
+      );
+    }
+
+    return <LoginPage onLogin={handleLogin} onForgotPassword={() => setAuthView('forgot-password')} />;
   }
 
   const renderPage = () => {
