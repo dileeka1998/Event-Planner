@@ -21,7 +21,7 @@ export class AuthService {
 
   async signUp(signupDto: SignupDto) {
     this.logger.log(`Attempting to sign up user with email: ${signupDto.email}`);
-    const { email, name, password } = signupDto;
+    const { email, name, password, role } = signupDto;
 
     const existingUser = await this.usersService.findByEmail(email);
     if (existingUser) {
@@ -29,10 +29,10 @@ export class AuthService {
       throw new ConflictException('User with this email already exists');
     }
 
-    const user = await this.usersService.create(email, name, password);
+    const user = await this.usersService.create(email, name, password, role);
     const token = this.generateToken(user);
     
-    this.logger.log(`User signed up successfully: ${email}`);
+    this.logger.log(`User signed up successfully: ${email} with role: ${user.role}`);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash, ...userResponse } = user;
     return { user: userResponse, token };

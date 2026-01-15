@@ -4,7 +4,8 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { Calendar } from 'lucide-react';
+import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
+import { Calendar, Users, UserCheck } from 'lucide-react';
 import { User } from '../types';
 import { signup, login } from '../api';
 import { toast } from 'sonner';
@@ -21,6 +22,7 @@ export function LoginPage({ onLogin, onForgotPassword }: LoginPageProps) {
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [regRole, setRegRole] = useState<'ORGANIZER' | 'ATTENDEE'>('ATTENDEE');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -33,7 +35,15 @@ export function LoginPage({ onLogin, onForgotPassword }: LoginPageProps) {
     setIsLoading(true);
     try {
       const { data } = await login({ email: loginEmail, password: loginPassword });
+      console.log('Login response - User:', data.user);
+      console.log('Login response - User role:', data.user?.role);
       localStorage.setItem('app_token', data.token);
+      // Ensure user object has role from backend
+      if (data.user && !data.user.role) {
+        console.warn('User object missing role, decoding from JWT');
+        const decoded = JSON.parse(atob(data.token.split('.')[1]));
+        data.user.role = decoded.role || 'ATTENDEE';
+      }
       onLogin(data.user, data.token);
       toast.success('Login successful!');
     } catch (error: any) {
@@ -53,10 +63,30 @@ export function LoginPage({ onLogin, onForgotPassword }: LoginPageProps) {
       toast.error('Please fill in all fields');
       return;
     }
+    if (!regRole) {
+      toast.error('Please select a role');
+      return;
+    }
 
     setIsLoading(true);
     try {
-      const { data } = await signup({ name: regName, email: regEmail, password: regPassword });
+      const { data } = await signup({ 
+        name: regName, 
+        email: regEmail, 
+        password: regPassword,
+        role: regRole
+      });
+      console.log('Signup response:', data);
+      console.log('Signup - User role from backend:', data.user?.role);
+      console.log('Signup - Selected role:', regRole);
+      
+      // Verify role matches what we sent
+      if (data.user && data.user.role !== regRole) {
+        console.warn(`Role mismatch! Sent: ${regRole}, Received: ${data.user.role}`);
+        // Force the role we selected
+        data.user.role = regRole;
+      }
+      
       localStorage.setItem('app_token', data.token);
       onLogin(data.user, data.token);
       toast.success('Registration successful!');
@@ -165,6 +195,46 @@ export function LoginPage({ onLogin, onForgotPassword }: LoginPageProps) {
 
               <TabsContent value="register">
                 <form onSubmit={handleRegister} className="space-y-4">
+                  <div>
+                    <Label className="mb-3 block">I want to sign up as:</Label>
+                    <RadioGroup 
+                      value={regRole} 
+                      onValueChange={(value) => setRegRole(value as 'ORGANIZER' | 'ATTENDEE')}
+                      className="grid grid-cols-2 gap-3"
+                    >
+                      <label
+                        htmlFor="role-organizer"
+                        className={`flex flex-col items-center justify-center p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                          regRole === 'ORGANIZER'
+                            ? 'border-[#0F6AB4] bg-[#0F6AB4]/10'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <RadioGroupItem value="ORGANIZER" id="role-organizer" className="sr-only" />
+                        <Users className={`w-6 h-6 mb-2 ${regRole === 'ORGANIZER' ? 'text-[#0F6AB4]' : 'text-gray-400'}`} />
+                        <span className={`text-sm font-medium ${regRole === 'ORGANIZER' ? 'text-[#0F6AB4]' : 'text-gray-700'}`}>
+                          Organizer
+                        </span>
+                        <span className="text-xs text-gray-500 mt-1 text-center">Create & manage events</span>
+                      </label>
+                      <label
+                        htmlFor="role-attendee"
+                        className={`flex flex-col items-center justify-center p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                          regRole === 'ATTENDEE'
+                            ? 'border-[#28A9A1] bg-[#28A9A1]/10'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <RadioGroupItem value="ATTENDEE" id="role-attendee" className="sr-only" />
+                        <UserCheck className={`w-6 h-6 mb-2 ${regRole === 'ATTENDEE' ? 'text-[#28A9A1]' : 'text-gray-400'}`} />
+                        <span className={`text-sm font-medium ${regRole === 'ATTENDEE' ? 'text-[#28A9A1]' : 'text-gray-700'}`}>
+                          Attendee
+                        </span>
+                        <span className="text-xs text-gray-500 mt-1 text-center">Join & RSVP to events</span>
+                      </label>
+                    </RadioGroup>
+                  </div>
+
                   <div>
                     <Label htmlFor="name">Full Name</Label>
                     <Input 

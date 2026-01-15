@@ -17,7 +17,7 @@ api.interceptors.request.use((config) => {
 });
 
 // Auth
-export const signup = (data: { email: string; name: string; password: string }) =>
+export const signup = (data: { email: string; name: string; password: string; role?: 'ORGANIZER' | 'ATTENDEE' }) =>
   api.post('/auth/signup', data);
 
 export const login = (data: { email: string; password: string }) =>
