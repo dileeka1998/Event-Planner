@@ -23,6 +23,9 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
 import { getErrorMessage } from '../utils/errorHandler';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
 
 export function AdminPanel() {
   const [users, setUsers] = useState<User[]>([]);
@@ -34,6 +37,13 @@ export function AdminPanel() {
   const [deleting, setDeleting] = useState(false);
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<{ title: string; message: string } | null>(null);
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const [userToUpdate, setUserToUpdate] = useState<User | null>(null);
+
+  const [updatedUserData, setUpdatedUserData] = useState({
+    name: "",
+    email: "",
+  });
 
   useEffect(() => {
     fetchAllData();
@@ -114,32 +124,17 @@ export function AdminPanel() {
   };
 
 
-  const handleEditClick = async (user: User) => {
-  // test api using sample data
-  const updatedData = {
-    name: 'weranga',
-    email: 'wera@gmail.com',
+  // open update user dialog
+  const handleUpdateClick = (user: User) => {
+    setUserToUpdate(user);
+    setUpdatedUserData({
+      name: user.name,
+      email: user.email,
+    });
+    setUpdateDialogOpen(true);
   };
 
-  try {
-    console.log('Updating user:', user.id, updatedData);
-    const updatedUser = await updateUser(user.id, updatedData);
-    console.log('User updated successfully:', updatedUser);
-    toast.success(`User ${user.name} updated successfully`);
-
-    // Update frontend list
-    setUsers(users.map(u => (u.id === user.id ? { ...u, ...updatedData } : u)));
-  } catch (error: any) {
-    console.error('Update user error:', error);
-    const errorInfo = getErrorMessage(error);
-    setErrorMessage({
-      title: errorInfo.title || 'Error',
-      message: errorInfo.message,
-    });
-    setErrorDialogOpen(true);
-  }
-};
-
+  
 
   // Calculate stats
   const totalUsers = users.length;
@@ -231,75 +226,118 @@ export function AdminPanel() {
           </TabsList>
 
           <TabsContent value="users" className="mt-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>User Management</CardTitle>
+  <Card>
+    <CardHeader>
+      <div className="flex items-center justify-between">
+        <CardTitle>User Management</CardTitle>
+        <div className="flex gap-2">
+          <Button variant="outline">
+            <Download className="w-4 h-4 mr-2" />
+            Export Users
+          </Button>
+        </div>
+      </div>
+    </CardHeader>
+    <CardContent>
+      {users.length === 0 ? (
+        <div className="text-center py-12 text-gray-500">
+          <p>No users found</p>
+        </div>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead>Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {users.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell>{user.name}</TableCell>
+                <TableCell>{user.email}</TableCell>
+                <TableCell>
+                  <Badge className={`${getRoleBadgeColor(user.role)} text-white`}>
+                    {getRoleDisplay(user.role)}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
+                </TableCell>
+                <TableCell>
                   <div className="flex gap-2">
-                    <Button variant="outline">
-                      <Download className="w-4 h-4 mr-2" />
-                      Export Users
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleUpdateClick(user)}
+                    >
+                      Edit
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => handleDeleteClick(user)}
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {users.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">
-                    <p>No users found</p>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Role</TableHead>
-                        <TableHead>Created</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {users.map((user) => (
-                        <TableRow key={user.id}>
-                          <TableCell>{user.name}</TableCell>
-                          <TableCell>{user.email}</TableCell>
-                          <TableCell>
-                            <Badge className={`${getRoleBadgeColor(user.role)} text-white`}>
-                              {getRoleDisplay(user.role)}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEditClick(user)}
-                              >
-                                Edit
-                              </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </CardContent>
+  </Card>
 
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                onClick={() => handleDeleteClick(user)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+  {/* 4️⃣ Single reusable dialog */}
+  <Dialog open={updateDialogOpen} onOpenChange={setUpdateDialogOpen}>
+    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogHeader>
+        <DialogTitle>Update User</DialogTitle>
+      </DialogHeader>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="name">Name</Label>
+          <Input
+            id="name"
+            value={updatedUserData.name}
+            onChange={(e) =>
+              setUpdatedUserData({ ...updatedUserData, name: e.target.value })
+            }
+            placeholder="Enter name"
+            autoFocus
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            value={updatedUserData.email}
+            onChange={(e) =>
+              setUpdatedUserData({ ...updatedUserData, email: e.target.value })
+            }
+            placeholder="Enter email"
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-4 col-span-2">
+          <Button
+            onClick={handleUpdateUser}
+            className="bg-[#0F6AB4] hover:bg-[#0D5A9A]"
+          >
+            Update User
+          </Button>
+        </div>
+      </div>
+    </DialogContent>
+  </Dialog>
+</TabsContent>
+
 
           <TabsContent value="venues" className="mt-6">
             <Card>
