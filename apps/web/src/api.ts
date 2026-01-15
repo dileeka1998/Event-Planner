@@ -98,6 +98,9 @@ export const getUsers = () => api.get('/users');
 // Admin
 export const deleteUser = (id: number) => api.delete(`/admin/users/${id}`);
 
+export const updateUser = (id: number, data: any) =>
+  api.patch(`/admin/users/${id}`, data);
+
 // AI
 export const parseBrief = (data: { text: string }) => aiApi.post('/parse-brief', data);
 
