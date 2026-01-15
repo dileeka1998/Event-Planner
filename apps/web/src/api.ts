@@ -23,6 +23,15 @@ export const signup = (data: { email: string; name: string; password: string }) 
 export const login = (data: { email: string; password: string }) =>
   api.post('/auth/login', data);
 //Forgot Passwrod
+export const forgotPassword = (data: { email: string }) =>
+  api.post('/auth/forgot-password', data);
+
+export const resetPassword = (data: {
+  token: string;
+  newPassword: string;
+  confirmPassword: string;
+}) =>
+  api.post('/auth/reset-password', data);
 
 // Events
 export const getEvents = () => api.get('/events');
