@@ -10,7 +10,7 @@ import { KPICard } from '../components/dashboard/KPICard';
 import { User, Venue, Event } from '../types';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '../components/ui/chart';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Legend } from 'recharts';
-import { getUsers, getVenues, getEvents, deleteUser } from '../api';
+import { getUsers, getVenues, getEvents, deleteUser, updateUser } from '../api';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -23,6 +23,9 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
 import { getErrorMessage } from '../utils/errorHandler';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
 
 export function AdminPanel() {
   const [users, setUsers] = useState<User[]>([]);
@@ -34,6 +37,13 @@ export function AdminPanel() {
   const [deleting, setDeleting] = useState(false);
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<{ title: string; message: string } | null>(null);
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const [userToUpdate, setUserToUpdate] = useState<User | null>(null);
+
+  const [updatedUserData, setUpdatedUserData] = useState({
+    name: "",
+    email: "",
+  });
 
   useEffect(() => {
     fetchAllData();
@@ -113,6 +123,43 @@ export function AdminPanel() {
     }
   };
 
+
+  // open update user dialog
+  const handleUpdateClick = (user: User) => {
+    setUserToUpdate(user);
+    setUpdatedUserData({
+      name: user.name,
+      email: user.email,
+    });
+    setUpdateDialogOpen(true);
+  };
+
+  // save updated user
+  const handleUpdateUser = async () => {
+    if (!userToUpdate) return;
+
+    try {
+      const updated = {
+        name: updatedUserData.name,
+        email: updatedUserData.email,
+      };
+
+      await updateUser(userToUpdate.id, updated);
+      toast.success(`User ${userToUpdate.name} updated successfully`);
+
+      //update local view
+      setUsers(
+        users.map((u) => (u.id === userToUpdate.id ? { ...u, ...updated } : u))
+      );
+
+      setUpdateDialogOpen(false);
+      setUserToUpdate(null);
+    } catch (error: any) {
+      const errorInfo = getErrorMessage(error);
+      toast.error(errorInfo.message || "Failed to update user");
+    }
+  };
+
   // Calculate stats
   const totalUsers = users.length;
   const totalEvents = events.length;
@@ -135,7 +182,7 @@ export function AdminPanel() {
 
   // Calculate financial data
   const totalBudget = events.reduce((sum, e) => sum + parseFloat(e.budget || '0'), 0);
-  const totalEstimated = events.reduce((sum, e) => 
+  const totalEstimated = events.reduce((sum, e) =>
     sum + parseFloat(e.eventBudget?.totalEstimated || '0'), 0
   );
   const avgEventBudget = totalEvents > 0 ? totalBudget / totalEvents : 0;
@@ -159,28 +206,28 @@ export function AdminPanel() {
 
       {/* System Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <KPICard 
+        <KPICard
           title="Total Users"
           value={totalUsers.toLocaleString()}
           icon={Users}
           color="#0F6AB4"
           trend={`${users.filter(u => u.role === 'ORGANIZER').length} organizers`}
         />
-        <KPICard 
+        <KPICard
           title="Total Events"
           value={totalEvents.toString()}
           icon={Calendar}
           color="#28A9A1"
           trend={`${activeEvents} active`}
         />
-        <KPICard 
+        <KPICard
           title="Total Venues"
           value={totalVenues.toString()}
           icon={MapPin}
           color="#8B5CF6"
           trend={`${venueUtilizationMap.size} in use`}
         />
-        <KPICard 
+        <KPICard
           title="Total Budget"
           value={`LKR ${(totalBudget / 1000000).toFixed(1)}M`}
           icon={Database}
@@ -203,68 +250,118 @@ export function AdminPanel() {
           </TabsList>
 
           <TabsContent value="users" className="mt-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>User Management</CardTitle>
+  <Card>
+    <CardHeader>
+      <div className="flex items-center justify-between">
+        <CardTitle>User Management</CardTitle>
+        <div className="flex gap-2">
+          <Button variant="outline">
+            <Download className="w-4 h-4 mr-2" />
+            Export Users
+          </Button>
+        </div>
+      </div>
+    </CardHeader>
+    <CardContent>
+      {users.length === 0 ? (
+        <div className="text-center py-12 text-gray-500">
+          <p>No users found</p>
+        </div>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead>Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {users.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell>{user.name}</TableCell>
+                <TableCell>{user.email}</TableCell>
+                <TableCell>
+                  <Badge className={`${getRoleBadgeColor(user.role)} text-white`}>
+                    {getRoleDisplay(user.role)}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
+                </TableCell>
+                <TableCell>
                   <div className="flex gap-2">
-                    <Button variant="outline">
-                      <Download className="w-4 h-4 mr-2" />
-                      Export Users
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleUpdateClick(user)}
+                    >
+                      Edit
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => handleDeleteClick(user)}
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {users.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">
-                    <p>No users found</p>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Role</TableHead>
-                        <TableHead>Created</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {users.map((user) => (
-                        <TableRow key={user.id}>
-                          <TableCell>{user.name}</TableCell>
-                          <TableCell>{user.email}</TableCell>
-                          <TableCell>
-                            <Badge className={`${getRoleBadgeColor(user.role)} text-white`}>
-                              {getRoleDisplay(user.role)}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-2">
-                              <Button variant="ghost" size="sm">Edit</Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm"
-                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                onClick={() => handleDeleteClick(user)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </CardContent>
+  </Card>
+
+  {/* 4️⃣ Single reusable dialog */}
+  <Dialog open={updateDialogOpen} onOpenChange={setUpdateDialogOpen}>
+    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogHeader>
+        <DialogTitle>Update User</DialogTitle>
+      </DialogHeader>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="name">Name</Label>
+          <Input
+            id="name"
+            value={updatedUserData.name}
+            onChange={(e) =>
+              setUpdatedUserData({ ...updatedUserData, name: e.target.value })
+            }
+            placeholder="Enter name"
+            autoFocus
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            value={updatedUserData.email}
+            onChange={(e) =>
+              setUpdatedUserData({ ...updatedUserData, email: e.target.value })
+            }
+            placeholder="Enter email"
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-4 col-span-2">
+          <Button
+            onClick={handleUpdateUser}
+            className="bg-[#0F6AB4] hover:bg-[#0D5A9A]"
+          >
+            Update User
+          </Button>
+        </div>
+      </div>
+    </DialogContent>
+  </Dialog>
+</TabsContent>
+
 
           <TabsContent value="venues" className="mt-6">
             <Card>
@@ -322,21 +419,21 @@ export function AdminPanel() {
           <TabsContent value="financial" className="mt-6">
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <KPICard 
+                <KPICard
                   title="Total Budget"
                   value={`LKR ${(totalBudget / 1000).toFixed(0)}K`}
                   icon={DollarSign}
                   color="#10B981"
                   trend={`Across ${totalEvents} events`}
                 />
-                <KPICard 
+                <KPICard
                   title="Avg Event Budget"
                   value={`LKR ${(avgEventBudget / 1000).toFixed(0)}K`}
                   icon={BarChart3}
                   color="#0F6AB4"
                   trend="Per event average"
                 />
-                <KPICard 
+                <KPICard
                   title="Total Estimated"
                   value={`LKR ${(totalEstimated / 1000).toFixed(0)}K`}
                   icon={TrendingUp}
@@ -371,7 +468,7 @@ export function AdminPanel() {
                             <TableCell>LKR {event.budget.toLocaleString()}</TableCell>
                             <TableCell>{event.attendees}</TableCell>
                             <TableCell>
-                              {event.attendees > 0 
+                              {event.attendees > 0
                                 ? `LKR ${(event.budget / event.attendees).toFixed(0)}`
                                 : '-'}
                             </TableCell>
@@ -480,7 +577,7 @@ export function AdminPanel() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex flex-row justify-end gap-3 mt-6">
-            <AlertDialogCancel 
+            <AlertDialogCancel
               disabled={deleting}
               className="border-gray-300 text-gray-700 hover:bg-gray-50"
             >
