@@ -33,4 +33,15 @@ export class UsersService {
     this.logger.log(`Fetching user with email: ${email}`);
     return this.repo.findOneBy({ email });
   }
+
+  async update(id: number, updates: Partial<User>) {
+    this.logger.log(`Updating user with ID: ${id}`);
+    await this.repo.update(id, updates);
+    return this.repo.findOneBy({ id });
+  }
+
+  findByResetToken(token: string) {
+    this.logger.log(`Finding user by reset token`);
+    return this.repo.findOneBy({ resetToken: token });
+  }
 }
