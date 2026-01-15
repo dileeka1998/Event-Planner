@@ -49,11 +49,14 @@ export default function App() {
       const decoded = decodeJWT(token);
       if (decoded && decoded.sub && decoded.email) {
         // Create user object from JWT payload
+        // Role should always be in JWT - if missing, default to ATTENDEE (safer default)
+        const role = decoded.role || 'ATTENDEE';
+        console.log('JWT decoded role:', role, 'Full decoded:', decoded);
         setCurrentUser({
           id: decoded.sub,
           email: decoded.email,
           name: decoded.name || decoded.email.split('@')[0],
-          role: decoded.role || 'ORGANIZER',
+          role: role,
         });
         setIsAuthenticated(true);
       } else {
@@ -73,6 +76,9 @@ export default function App() {
   }, []);
 
   const handleLogin = (user: User, token: string) => {
+    console.log('Login - User object from backend:', user);
+    console.log('Login - User role:', user.role);
+    // Always use the user object from backend response (source of truth)
     setCurrentUser(user);
     setIsAuthenticated(true);
     setCurrentPage('dashboard');
@@ -135,21 +141,31 @@ export default function App() {
   }
 
   const renderPage = () => {
+    // Debug: Log current user role
+    console.log('renderPage - currentUser.role:', currentUser.role);
+    console.log('renderPage - currentUser:', currentUser);
+    
+    // Normalize role to uppercase for comparison (in case of case mismatch)
+    const userRole = (currentUser.role || '').toUpperCase();
+    
     switch (currentPage) {
       case 'dashboard':
-        if (currentUser.role === 'ORGANIZER') {
+        if (userRole === 'ORGANIZER') {
+          console.log('Showing Organizer Dashboard');
           return <OrganizerDashboard onNavigate={handleNavigate} />;
         }
         // For Admin and Attendee, show a simplified dashboard
+        console.log('Showing Attendee/Admin Dashboard, role:', userRole);
         return (
           <div className="space-y-6">
             <div>
               <h1 className="text-gray-900 mb-2">Welcome back, {currentUser.name}!</h1>
               <p className="text-gray-600">
-                {currentUser.role === 'ADMIN' 
+                {userRole === 'ADMIN' 
                   ? 'Access the Admin Panel to manage the system' 
                   : 'Explore recommended sessions and manage your schedule'}
               </p>
+              <p className="text-xs text-gray-400 mt-2">Your role: {currentUser.role}</p>
             </div>
           </div>
         );
@@ -176,7 +192,23 @@ export default function App() {
       case 'settings':
         return <SettingsPage user={currentUser} />;
       default:
-        return <OrganizerDashboard onNavigate={handleNavigate} />;
+        // Show appropriate dashboard based on user role
+        const defaultRole = (currentUser.role || '').toUpperCase();
+        if (defaultRole === 'ORGANIZER') {
+          return <OrganizerDashboard onNavigate={handleNavigate} />;
+        }
+        return (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-gray-900 mb-2">Welcome back, {currentUser.name}!</h1>
+              <p className="text-gray-600">
+                {defaultRole === 'ADMIN' 
+                  ? 'Access the Admin Panel to manage the system' 
+                  : 'Explore recommended sessions and manage your schedule'}
+              </p>
+            </div>
+          </div>
+        );
     }
   };
 
