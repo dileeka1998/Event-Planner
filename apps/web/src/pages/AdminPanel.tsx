@@ -10,7 +10,7 @@ import { KPICard } from '../components/dashboard/KPICard';
 import { User, Venue, Event } from '../types';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '../components/ui/chart';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Legend } from 'recharts';
-import { getUsers, getVenues, getEvents, deleteUser } from '../api';
+import { getUsers, getVenues, getEvents, deleteUser, updateUser } from '../api';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -113,6 +113,34 @@ export function AdminPanel() {
     }
   };
 
+
+  const handleEditClick = async (user: User) => {
+  // test api using sample data
+  const updatedData = {
+    name: 'weranga',
+    email: 'wera@gmail.com',
+  };
+
+  try {
+    console.log('Updating user:', user.id, updatedData);
+    const updatedUser = await updateUser(user.id, updatedData);
+    console.log('User updated successfully:', updatedUser);
+    toast.success(`User ${user.name} updated successfully`);
+
+    // Update frontend list
+    setUsers(users.map(u => (u.id === user.id ? { ...u, ...updatedData } : u)));
+  } catch (error: any) {
+    console.error('Update user error:', error);
+    const errorInfo = getErrorMessage(error);
+    setErrorMessage({
+      title: errorInfo.title || 'Error',
+      message: errorInfo.message,
+    });
+    setErrorDialogOpen(true);
+  }
+};
+
+
   // Calculate stats
   const totalUsers = users.length;
   const totalEvents = events.length;
@@ -135,7 +163,7 @@ export function AdminPanel() {
 
   // Calculate financial data
   const totalBudget = events.reduce((sum, e) => sum + parseFloat(e.budget || '0'), 0);
-  const totalEstimated = events.reduce((sum, e) => 
+  const totalEstimated = events.reduce((sum, e) =>
     sum + parseFloat(e.eventBudget?.totalEstimated || '0'), 0
   );
   const avgEventBudget = totalEvents > 0 ? totalBudget / totalEvents : 0;
@@ -159,28 +187,28 @@ export function AdminPanel() {
 
       {/* System Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <KPICard 
+        <KPICard
           title="Total Users"
           value={totalUsers.toLocaleString()}
           icon={Users}
           color="#0F6AB4"
           trend={`${users.filter(u => u.role === 'ORGANIZER').length} organizers`}
         />
-        <KPICard 
+        <KPICard
           title="Total Events"
           value={totalEvents.toString()}
           icon={Calendar}
           color="#28A9A1"
           trend={`${activeEvents} active`}
         />
-        <KPICard 
+        <KPICard
           title="Total Venues"
           value={totalVenues.toString()}
           icon={MapPin}
           color="#8B5CF6"
           trend={`${venueUtilizationMap.size} in use`}
         />
-        <KPICard 
+        <KPICard
           title="Total Budget"
           value={`LKR ${(totalBudget / 1000000).toFixed(1)}M`}
           icon={Database}
@@ -246,9 +274,16 @@ export function AdminPanel() {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-2">
-                              <Button variant="ghost" size="sm">Edit</Button>
-                              <Button 
-                                variant="ghost" 
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEditClick(user)}
+                              >
+                                Edit
+                              </Button>
+
+                              <Button
+                                variant="ghost"
                                 size="sm"
                                 className="text-destructive hover:text-destructive hover:bg-destructive/10"
                                 onClick={() => handleDeleteClick(user)}
@@ -322,21 +357,21 @@ export function AdminPanel() {
           <TabsContent value="financial" className="mt-6">
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <KPICard 
+                <KPICard
                   title="Total Budget"
                   value={`LKR ${(totalBudget / 1000).toFixed(0)}K`}
                   icon={DollarSign}
                   color="#10B981"
                   trend={`Across ${totalEvents} events`}
                 />
-                <KPICard 
+                <KPICard
                   title="Avg Event Budget"
                   value={`LKR ${(avgEventBudget / 1000).toFixed(0)}K`}
                   icon={BarChart3}
                   color="#0F6AB4"
                   trend="Per event average"
                 />
-                <KPICard 
+                <KPICard
                   title="Total Estimated"
                   value={`LKR ${(totalEstimated / 1000).toFixed(0)}K`}
                   icon={TrendingUp}
@@ -371,7 +406,7 @@ export function AdminPanel() {
                             <TableCell>LKR {event.budget.toLocaleString()}</TableCell>
                             <TableCell>{event.attendees}</TableCell>
                             <TableCell>
-                              {event.attendees > 0 
+                              {event.attendees > 0
                                 ? `LKR ${(event.budget / event.attendees).toFixed(0)}`
                                 : '-'}
                             </TableCell>
@@ -480,7 +515,7 @@ export function AdminPanel() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex flex-row justify-end gap-3 mt-6">
-            <AlertDialogCancel 
+            <AlertDialogCancel
               disabled={deleting}
               className="border-gray-300 text-gray-700 hover:bg-gray-50"
             >
