@@ -1,7 +1,7 @@
-import { Controller, Get, Post, Delete, Param, UseGuards, ParseIntPipe, Request } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, UseGuards, ParseIntPipe, Request, Query } from '@nestjs/common';
 import { AttendeesService } from './attendees.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 
 @ApiTags('events')
 @Controller('events/:id/attendees')
@@ -42,3 +42,27 @@ export class AttendeesController {
   }
 }
 
+@ApiTags('attendees')
+@Controller('attendees')
+export class AttendeesRecommendationsController {
+  constructor(private readonly attendeesService: AttendeesService) {}
+
+  @Get('recommendations')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get recommended sessions for authenticated attendee' })
+  @ApiQuery({ name: 'topic', required: false, description: 'Filter by topic/category' })
+  @ApiQuery({ name: 'day', required: false, description: 'Filter by day (Day 1, Day 2, or day of week)' })
+  @ApiQuery({ name: 'track', required: false, description: 'Filter by track (same as topic for now)' })
+  @ApiResponse({ status: 200, description: 'Return recommended sessions.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  getRecommendations(
+    @Request() req: any,
+    @Query('topic') topic?: string,
+    @Query('day') day?: string,
+    @Query('track') track?: string,
+  ) {
+    const userId = req.user.userId;
+    return this.attendeesService.getRecommendedSessions(userId, { topic, day, track });
+  }
+}

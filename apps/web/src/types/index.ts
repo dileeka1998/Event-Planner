@@ -62,7 +62,9 @@ export interface Session {
   event: Event;
   room?: Room | null;
   // Frontend display helpers
-  track?: string;
+  topic?: string;
+  dayNumber?: string | null;
+  dayOfWeek?: string | null;
   expectedAudience?: number;
   time?: string;
   matchScore?: number;

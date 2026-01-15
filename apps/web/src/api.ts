@@ -101,6 +101,15 @@ export const deleteUser = (id: number) => api.delete(`/admin/users/${id}`);
 export const updateUser = (id: number, data: any) =>
   api.patch(`/admin/users/${id}`, data);
 
+// Recommendations
+export const getRecommendedSessions = (filters?: { topic?: string; day?: string; track?: string }) => {
+  const params = new URLSearchParams();
+  if (filters?.topic) params.append('topic', filters.topic);
+  if (filters?.day) params.append('day', filters.day);
+  if (filters?.track) params.append('track', filters.track);
+  return api.get(`/attendees/recommendations?${params.toString()}`);
+};
+
 // AI
 export const parseBrief = (data: { text: string }) => aiApi.post('/parse-brief', data);
 

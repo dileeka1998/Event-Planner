@@ -27,7 +27,6 @@ export function SpeakersPage() {
         if (event.sessions) {
           allSessions.push(...event.sessions.map((s: any) => ({
             ...s,
-            track: s.track || 'General',
             expectedAudience: event.expectedAudience,
             duration: s.durationMin,
           })));
@@ -129,7 +128,7 @@ export function SpeakersPage() {
                     <TableCell>{session.speaker || '-'}</TableCell>
                     <TableCell>
                       <span className="px-2 py-1 bg-[#0F6AB4]/10 text-[#0F6AB4] rounded text-xs">
-                        {session.track || 'General'}
+                        {session.topic || 'General'}
                       </span>
                     </TableCell>
                     <TableCell>{session.durationMin || session.duration} min</TableCell>

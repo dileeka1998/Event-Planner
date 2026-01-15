@@ -10,7 +10,7 @@ import { EventAttendee } from './event-attendee.entity';
 import { EventsService } from './events.service';
 import { EventsController } from './events.controller';
 import { AttendeesService } from './attendees.service';
-import { AttendeesController } from './attendees.controller';
+import { AttendeesController, AttendeesRecommendationsController } from './attendees.controller';
 import { UsersModule } from '@users/users.module';
 import { User } from '@users/user.entity';
 import { AiModule } from '../ai/ai.module';
@@ -24,7 +24,7 @@ import { VenuesModule } from '../venues/venues.module';
     VenuesModule,
   ],
   providers: [EventsService, AttendeesService],
-  controllers: [EventsController, AttendeesController],
+  controllers: [EventsController, AttendeesController, AttendeesRecommendationsController],
   exports: [EventsService],
 })
 export class EventsModule {}

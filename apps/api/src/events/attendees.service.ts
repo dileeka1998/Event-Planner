@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { EventAttendee, AttendeeStatus } from './event-attendee.entity';
 import { Event } from './event.entity';
+import { Session } from './session.entity';
 import { User } from '@users/user.entity';
 
 @Injectable()
@@ -12,6 +13,7 @@ export class AttendeesService {
   constructor(
     @InjectRepository(EventAttendee) private attendeeRepo: Repository<EventAttendee>,
     @InjectRepository(Event) private eventRepo: Repository<Event>,
+    @InjectRepository(Session) private sessionRepo: Repository<Session>,
     @InjectRepository(User) private userRepo: Repository<User>,
     private dataSource: DataSource,
   ) {}
@@ -130,6 +132,150 @@ export class AttendeesService {
       relations: ['user'],
       order: { joinedAt: 'ASC' },
     });
+  }
+
+  private extractTopicFromTitle(title: string): string {
+    const titleLower = title.toLowerCase();
+    const topicKeywords: { [key: string]: string } = {
+      'ai': 'Technology',
+      'artificial intelligence': 'Technology',
+      'machine learning': 'Technology',
+      'web': 'Development',
+      'development': 'Development',
+      'programming': 'Development',
+      'data': 'Data',
+      'data science': 'Data',
+      'analytics': 'Data',
+      'security': 'Security',
+      'cybersecurity': 'Security',
+      'design': 'Design',
+      'ux': 'Design',
+      'ui': 'Design',
+      'cloud': 'Technology',
+      'devops': 'Development',
+      'mobile': 'Development',
+      'blockchain': 'Technology',
+    };
+
+    for (const [keyword, topic] of Object.entries(topicKeywords)) {
+      if (titleLower.includes(keyword)) {
+        return topic;
+      }
+    }
+
+    return 'General';
+  }
+
+  private calculateDayInfo(sessionStartTime: Date | null, eventStartDate: string): { dayNumber: string; dayOfWeek: string } | null {
+    if (!sessionStartTime || !eventStartDate) {
+      return null;
+    }
+
+    const eventStart = new Date(eventStartDate);
+    eventStart.setHours(0, 0, 0, 0);
+    const sessionStart = new Date(sessionStartTime);
+    sessionStart.setHours(0, 0, 0, 0);
+
+    const diffTime = sessionStart.getTime() - eventStart.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      return null;
+    }
+
+    const dayNumber = `Day ${diffDays + 1}`;
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayOfWeek = dayNames[sessionStart.getDay()];
+
+    return { dayNumber, dayOfWeek };
+  }
+
+  async getRecommendedSessions(
+    userId: number,
+    filters?: { topic?: string; day?: string; track?: string }
+  ) {
+    this.logger.log(`Fetching recommended sessions for user ${userId} with filters: ${JSON.stringify(filters)}`);
+
+    // Fetch all sessions with relations
+    const allSessions = await this.sessionRepo.find({
+      relations: ['event', 'event.organizer', 'room'],
+    });
+
+    this.logger.log(`Found ${allSessions.length} total sessions in database`);
+
+    if (allSessions.length === 0) {
+      this.logger.warn('No sessions found in database. Returning empty array.');
+      return [];
+    }
+
+    // Process sessions with topic and day information
+    const processedSessions = allSessions.map((session) => {
+      const topic = this.extractTopicFromTitle(session.title);
+      const dayInfo = this.calculateDayInfo(session.startTime, session.event.startDate);
+
+      this.logger.debug(`Processing session ${session.id}: title="${session.title}", topic="${topic}", dayInfo=${JSON.stringify(dayInfo)}`);
+
+      return {
+        ...session,
+        topic,
+        dayNumber: dayInfo?.dayNumber || null,
+        dayOfWeek: dayInfo?.dayOfWeek || null,
+      };
+    });
+
+    // Apply filters
+    let filteredSessions = processedSessions;
+    this.logger.log(`Before filtering: ${filteredSessions.length} sessions`);
+
+    if (filters?.topic) {
+      const beforeCount = filteredSessions.length;
+      filteredSessions = filteredSessions.filter(
+        (s) => s.topic.toLowerCase() === filters.topic!.toLowerCase()
+      );
+      this.logger.log(`After topic filter "${filters.topic}": ${filteredSessions.length} sessions (was ${beforeCount})`);
+    }
+
+    if (filters?.day) {
+      const beforeCount = filteredSessions.length;
+      filteredSessions = filteredSessions.filter(
+        (s) => s.dayNumber === filters.day || s.dayOfWeek === filters.day
+      );
+      this.logger.log(`After day filter "${filters.day}": ${filteredSessions.length} sessions (was ${beforeCount})`);
+    }
+
+    if (filters?.track) {
+      const beforeCount = filteredSessions.length;
+      filteredSessions = filteredSessions.filter(
+        (s) => s.topic.toLowerCase() === filters.track!.toLowerCase()
+      );
+      this.logger.log(`After track filter "${filters.track}": ${filteredSessions.length} sessions (was ${beforeCount})`);
+    }
+
+    this.logger.log(`Returning ${filteredSessions.length} filtered sessions`);
+
+    // Format response
+    return filteredSessions.map((session) => ({
+      id: session.id,
+      title: session.title,
+      speaker: session.speaker,
+      durationMin: session.durationMin,
+      startTime: session.startTime,
+      topic: session.topic,
+      dayNumber: session.dayNumber,
+      dayOfWeek: session.dayOfWeek,
+      event: {
+        id: session.event.id,
+        title: session.event.title,
+        startDate: session.event.startDate,
+        endDate: session.event.endDate,
+        expectedAudience: session.event.expectedAudience,
+      },
+      room: session.room ? {
+        id: session.room.id,
+        name: session.room.name,
+        capacity: session.room.capacity,
+      } : null,
+    }));
   }
 }
 
