@@ -10,10 +10,15 @@ export class UsersService {
 
   constructor(@InjectRepository(User) private repo: Repository<User>) {}
 
-  async create(email: string, name: string, password: string) {
-    this.logger.log(`Creating user with email: ${email}`);
+  async create(email: string, name: string, password: string, role?: UserRole) {
+    this.logger.log(`Creating user with email: ${email}, role: ${role || 'ATTENDEE (default)'}`);
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = this.repo.create({ email, name, passwordHash, role: UserRole.ORGANIZER });
+    const user = this.repo.create({ 
+      email, 
+      name, 
+      passwordHash, 
+      role: role || UserRole.ATTENDEE 
+    });
     const savedUser = await this.repo.save(user);
     this.logger.log(`User created with ID: ${savedUser.id}`);
     return savedUser;
