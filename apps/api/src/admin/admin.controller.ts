@@ -1,4 +1,4 @@
-import { Controller, Delete, Param, ParseIntPipe, UseGuards, Req, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Delete, Param, ParseIntPipe, UseGuards, Req, HttpCode, HttpStatus, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { AdminRoleGuard } from '../auth/admin-role.guard';
@@ -8,6 +8,8 @@ import { AdminRoleGuard } from '../auth/admin-role.guard';
 @UseGuards(AdminRoleGuard)
 @ApiBearerAuth()
 export class AdminController {
+  private readonly logger = new Logger(AdminController.name);
+
   constructor(private readonly adminService: AdminService) {}
 
   @Delete('users/:id')
@@ -19,7 +21,17 @@ export class AdminController {
   @ApiResponse({ status: 403, description: 'Forbidden. Admin role required.' })
   @ApiResponse({ status: 404, description: 'User not found.' })
   async deleteUser(@Param('id', ParseIntPipe) userId: number, @Req() req: any) {
-    const adminId = req.user.userId;
+    this.logger.log(`DELETE /admin/users/${userId} - Request received`);
+    this.logger.log(`Request user: ${JSON.stringify(req.user)}`);
+    
+    const adminId = req.user?.userId;
+    if (!adminId) {
+      this.logger.error('No admin ID found in request');
+      throw new Error('Admin ID not found in request');
+    }
+    
+    this.logger.log(`Admin ${adminId} attempting to delete user ${userId}`);
     await this.adminService.deleteUser(userId, adminId);
+    this.logger.log(`DELETE /admin/users/${userId} - Success`);
   }
 }
