@@ -134,7 +134,31 @@ export function AdminPanel() {
     setUpdateDialogOpen(true);
   };
 
-  
+  // save updated user
+  const handleUpdateUser = async () => {
+    if (!userToUpdate) return;
+
+    try {
+      const updated = {
+        name: updatedUserData.name,
+        email: updatedUserData.email,
+      };
+
+      await updateUser(userToUpdate.id, updated);
+      toast.success(`User ${userToUpdate.name} updated successfully`);
+
+      //update local view
+      setUsers(
+        users.map((u) => (u.id === userToUpdate.id ? { ...u, ...updated } : u))
+      );
+
+      setUpdateDialogOpen(false);
+      setUserToUpdate(null);
+    } catch (error: any) {
+      const errorInfo = getErrorMessage(error);
+      toast.error(errorInfo.message || "Failed to update user");
+    }
+  };
 
   // Calculate stats
   const totalUsers = users.length;
