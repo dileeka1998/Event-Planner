@@ -85,6 +85,9 @@ export const leaveEvent = (eventId: number) => api.delete(`/events/${eventId}/at
 // Users (for admin panel)
 export const getUsers = () => api.get('/users');
 
+// Admin
+export const deleteUser = (id: number) => api.delete(`/admin/users/${id}`);
+
 // AI
 export const parseBrief = (data: { text: string }) => aiApi.post('/parse-brief', data);
 

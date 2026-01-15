@@ -4,20 +4,36 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Users, Calendar, Activity, Database, Plus, Download, MapPin, DollarSign, TrendingUp, BarChart3, Loader2 } from 'lucide-react';
+import { Users, Calendar, Activity, Database, Plus, Download, MapPin, DollarSign, TrendingUp, BarChart3, Loader2, Trash2 } from 'lucide-react';
 import { StatsCard } from '../components/dashboard/StatsCard';
 import { KPICard } from '../components/dashboard/KPICard';
 import { User, Venue, Event } from '../types';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '../components/ui/chart';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Legend } from 'recharts';
-import { getUsers, getVenues, getEvents } from '../api';
+import { getUsers, getVenues, getEvents, deleteUser } from '../api';
 import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../components/ui/alert-dialog';
+import { getErrorMessage } from '../utils/errorHandler';
 
 export function AdminPanel() {
   const [users, setUsers] = useState<User[]>([]);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<{ title: string; message: string } | null>(null);
 
   useEffect(() => {
     fetchAllData();
@@ -61,6 +77,39 @@ export function AdminPanel() {
       case 'ORGANIZER': return 'Organizer';
       case 'ATTENDEE': return 'Attendee';
       default: return role;
+    }
+  };
+
+  const handleDeleteClick = (user: User) => {
+    setUserToDelete(user);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!userToDelete) return;
+
+    setDeleting(true);
+    try {
+      console.log('Attempting to delete user:', userToDelete.id, userToDelete);
+      await deleteUser(userToDelete.id);
+      console.log('User deleted successfully');
+      toast.success(`User ${userToDelete.name} has been deleted`);
+      // Remove user from list
+      setUsers(users.filter(u => u.id !== userToDelete.id));
+      setDeleteDialogOpen(false);
+      setUserToDelete(null);
+    } catch (error: any) {
+      console.error('Delete user error:', error);
+      console.error('Error response:', error.response);
+      const errorInfo = getErrorMessage(error);
+      setErrorMessage({
+        title: errorInfo.title || 'Error',
+        message: errorInfo.message,
+      });
+      setErrorDialogOpen(true);
+      setDeleteDialogOpen(false);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -198,6 +247,14 @@ export function AdminPanel() {
                           <TableCell>
                             <div className="flex gap-2">
                               <Button variant="ghost" size="sm">Edit</Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => handleDeleteClick(user)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -410,6 +467,67 @@ export function AdminPanel() {
           </TabsContent>
         </Tabs>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent className="sm:max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-lg font-semibold text-gray-900">
+              Delete User
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm text-gray-600 mt-2">
+              Are you sure you want to delete the user <strong className="font-semibold text-gray-900">{userToDelete?.name}</strong>, has role <strong className="font-semibold text-gray-900">{userToDelete ? getRoleDisplay(userToDelete.role) : ''}</strong>? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex flex-row justify-end gap-3 mt-6">
+            <AlertDialogCancel 
+              disabled={deleting}
+              className="border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 focus:ring-destructive/20"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Error Dialog */}
+      <AlertDialog open={errorDialogOpen} onOpenChange={setErrorDialogOpen}>
+        <AlertDialogContent className="sm:max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-lg font-semibold text-gray-900">
+              {errorMessage?.title || 'Error'}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm text-gray-600 mt-2">
+              {errorMessage?.message || 'An unexpected error occurred.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex flex-row justify-end mt-6">
+            <AlertDialogAction
+              onClick={() => {
+                setErrorDialogOpen(false);
+                setErrorMessage(null);
+              }}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
