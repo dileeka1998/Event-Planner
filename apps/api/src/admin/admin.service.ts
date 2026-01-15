@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class AdminService {
@@ -29,4 +30,34 @@ export class AdminService {
     await this.userRepo.remove(user);
     this.logger.log(`User ${userId} successfully deleted by admin ${adminId}`);
   }
+
+  async updateUser(
+    userId: number,
+    adminId: number,
+    updateUserDto: UpdateUserDto,
+  ) {
+    this.logger.log(`Admin ${adminId} attempting to update user ${userId}`);
+
+    // Prevent admin from updating themselves
+    if (userId === adminId) {
+      this.logger.warn(`Admin ${adminId} attempted to update themselves`);
+      throw new BadRequestException('You cannot update your own account');
+    }
+
+    // Check if user exists
+    const user = await this.userRepo.findOneBy({ id: userId });
+    if (!user) {
+      this.logger.warn(`User with ID ${userId} not found`);
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    // Apply updates
+    Object.assign(user, updateUserDto);
+
+    const updatedUser = await this.userRepo.save(user);
+    this.logger.log(`User ${userId} successfully updated by admin ${adminId}`);
+
+    return updatedUser;
+  }
+
 }
