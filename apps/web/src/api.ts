@@ -121,7 +121,7 @@ export const createSession = (
 export const updateSession = (
   eventId: number,
   sessionId: number,
-  data: Partial<{ title: string; speaker?: string; durationMin: number; startTime?: string; roomId?: number | null; topic?: string }>
+  data: Partial<{ title: string; speaker?: string; durationMin: number; startTime?: string; roomId?: number | null; topic?: string; capacity?: number }>
 ) => api.put(`/events/${eventId}/sessions/${sessionId}`, data);
 
 export const deleteSession = (eventId: number, sessionId: number) =>

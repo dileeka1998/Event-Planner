@@ -264,6 +264,7 @@ export class AttendeesService {
       topic: session.topic,
       dayNumber: session.dayNumber,
       dayOfWeek: session.dayOfWeek,
+      capacity: session.capacity,
       event: {
         id: session.event.id,
         title: session.event.title,

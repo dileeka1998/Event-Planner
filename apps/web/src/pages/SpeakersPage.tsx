@@ -28,6 +28,7 @@ export function SpeakersPage() {
     startTime: '',
     roomId: 'none',
     topic: 'General',
+    capacity: 0,
   });
 
   useEffect(() => {
@@ -94,6 +95,7 @@ export function SpeakersPage() {
         startTime: session.startTime ? new Date(session.startTime).toISOString().slice(0, 16) : '',
         roomId: session.room?.id?.toString() || 'none',
         topic: session.topic || 'General',
+        capacity: session.capacity || 0,
       });
     } else {
       setEditingSession(null);
@@ -104,6 +106,7 @@ export function SpeakersPage() {
         startTime: '',
         roomId: 'none',
         topic: 'General',
+        capacity: 0,
       });
     }
     setIsDialogOpen(true);
@@ -124,6 +127,7 @@ export function SpeakersPage() {
         startTime: '',
         roomId: 'none',
         topic: 'General',
+        capacity: 0,
       });
     } else {
       // If true, keep it open (shouldn't normally happen, but handle it)
@@ -155,6 +159,7 @@ export function SpeakersPage() {
         startTime: sessionForm.startTime || undefined,
         roomId: sessionForm.roomId && sessionForm.roomId !== 'none' ? parseInt(sessionForm.roomId) : undefined,
         topic: sessionForm.topic || 'General',
+        capacity: sessionForm.capacity || 0,
       };
 
       if (editingSession) {
@@ -314,6 +319,22 @@ export function SpeakersPage() {
                   onChange={(e) => setSessionForm({ ...sessionForm, startTime: e.target.value })}
                 />
               </div>
+            </div>
+            <div>
+              <Label htmlFor="capacity">Capacity *</Label>
+              <Input
+                id="capacity"
+                type="number"
+                placeholder="0"
+                min="0"
+                value={sessionForm.capacity}
+                onChange={(e) => setSessionForm({ ...sessionForm, capacity: parseInt(e.target.value) || 0 })}
+              />
+              {selectedEventId && events.find(e => e.id === selectedEventId) && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Max: {events.find(e => e.id === selectedEventId)?.expectedAudience || 0} (Event capacity)
+                </p>
+              )}
             </div>
             <div>
               <Label htmlFor="room">Room</Label>

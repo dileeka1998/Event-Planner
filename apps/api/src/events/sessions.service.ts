@@ -62,6 +62,14 @@ export class SessionsService {
       }
     }
 
+    // Validate capacity doesn't exceed event expectedAudience
+    if (dto.capacity > event.expectedAudience) {
+      this.logger.warn(`Session capacity ${dto.capacity} exceeds event expectedAudience ${event.expectedAudience}`);
+      throw new BadRequestException(
+        `Session capacity (${dto.capacity}) cannot exceed event expected audience (${event.expectedAudience})`
+      );
+    }
+
     // Create session
     const session = this.sessionRepo.create({
       event,
@@ -71,6 +79,7 @@ export class SessionsService {
       startTime: dto.startTime ? new Date(dto.startTime) : null,
       room: room || null,
       topic: dto.topic || 'General',
+      capacity: dto.capacity || 0,
     });
 
     const savedSession = await this.sessionRepo.save(session);
@@ -166,6 +175,16 @@ export class SessionsService {
     if (dto.durationMin !== undefined) session.durationMin = dto.durationMin;
     if (dto.topic !== undefined) {
       session.topic = dto.topic || 'General';
+    }
+    if (dto.capacity !== undefined) {
+      // Validate capacity doesn't exceed event expectedAudience
+      if (dto.capacity > event.expectedAudience) {
+        this.logger.warn(`Session capacity ${dto.capacity} exceeds event expectedAudience ${event.expectedAudience}`);
+        throw new BadRequestException(
+          `Session capacity (${dto.capacity}) cannot exceed event expected audience (${event.expectedAudience})`
+        );
+      }
+      session.capacity = dto.capacity;
     }
 
     const updatedSession = await this.sessionRepo.save(session);

@@ -55,6 +55,7 @@ export function RecommendationsPage() {
         time: s.startTime ? new Date(s.startTime).toLocaleTimeString() : undefined,
         room: s.room?.name || null,
         expectedAudience: s.event?.expectedAudience,
+        capacity: s.capacity,
       }));
       setSessions(processedSessions);
     } catch (error: any) {
@@ -200,6 +201,11 @@ export function RecommendationsPage() {
                   <div className="text-xs text-gray-500">
                     Duration: {session.durationMin || session.duration} min
                   </div>
+                  {session.capacity !== undefined && session.event?.expectedAudience && (
+                    <div className="text-xs text-gray-500">
+                      Capacity: {Math.round((session.capacity / session.event.expectedAudience) * 100)}% ({session.capacity}/{session.event.expectedAudience})
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -241,6 +247,11 @@ export function RecommendationsPage() {
                       )}
                       <span>{session.durationMin || session.duration} min</span>
                     </div>
+                    {session.capacity !== undefined && session.event?.expectedAudience && (
+                      <div className="text-xs text-gray-500">
+                        Capacity: {Math.round((session.capacity / session.event.expectedAudience) * 100)}% ({session.capacity}/{session.event.expectedAudience})
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardContent>

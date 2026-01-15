@@ -36,4 +36,9 @@ export class CreateSessionDto {
   @IsNotEmpty()
   @IsIn(['Technology', 'Development', 'Design', 'Data', 'Security', 'General'])
   topic!: string;
+
+  @ApiProperty({ description: 'Capacity of the session (must not exceed event expectedAudience)', default: 0 })
+  @IsNumber()
+  @Min(0)
+  capacity!: number;
 }

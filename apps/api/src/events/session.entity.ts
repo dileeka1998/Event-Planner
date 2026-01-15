@@ -12,4 +12,5 @@ export class Session {
   @Column({ type: 'int', default: 60 }) durationMin!: number;
   @Column({ type: 'datetime', nullable: true }) startTime!: Date | null;
   @Column({ default: 'General' }) topic!: string;
+  @Column({ type: 'int', default: 0 }) capacity!: number;
 }

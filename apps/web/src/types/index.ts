@@ -65,6 +65,7 @@ export interface Session {
   topic?: string;
   dayNumber?: string | null;
   dayOfWeek?: string | null;
+  capacity?: number;
   expectedAudience?: number;
   time?: string;
   matchScore?: number;
