@@ -1,4 +1,4 @@
-import { Search, Download, UserPlus, X } from 'lucide-react';
+import { Search, Download, UserPlus } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -106,16 +106,14 @@ export function AttendeeTable({
             <tr className="border-b border-gray-200 bg-gray-50">
               <th className="text-left p-3 text-sm text-gray-600">Name</th>
               <th className="text-left p-3 text-sm text-gray-600">Email</th>
-              <th className="text-left p-3 text-sm text-gray-600">Phone</th>
               <th className="text-left p-3 text-sm text-gray-600">Status</th>
               <th className="text-left p-3 text-sm text-gray-600">Joined At</th>
-              {showActions && <th className="text-left p-3 text-sm text-gray-600">Actions</th>}
             </tr>
           </thead>
           <tbody>
             {filteredAttendees.length === 0 ? (
               <tr>
-                <td colSpan={showActions ? 6 : 5} className="p-8 text-center text-gray-500">
+                <td colSpan={4} className="p-8 text-center text-gray-500">
                   {searchTerm ? 'No attendees found matching your search' : 'No attendees registered yet'}
                 </td>
               </tr>
@@ -124,7 +122,6 @@ export function AttendeeTable({
                 <tr key={attendee.id} className="border-b border-gray-200 hover:bg-gray-50">
                   <td className="p-3 text-sm text-gray-900">{attendee.name}</td>
                   <td className="p-3 text-sm text-gray-600">{attendee.email}</td>
-                  <td className="p-3 text-sm text-gray-600">{attendee.phone || '-'}</td>
                   <td className="p-3">
                     <Badge className={`${getStatusColor(attendee.status)} text-white text-xs`}>
                       {getStatusDisplay(attendee.status)}
@@ -137,18 +134,6 @@ export function AttendeeTable({
                       day: 'numeric'
                     })}
                   </td>
-                  {showActions && onRemoveAttendee && (
-                    <td className="p-3">
-                      <Button 
-                        size="sm" 
-                        variant="ghost"
-                        onClick={() => onRemoveAttendee(attendee.id)}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </td>
-                  )}
                 </tr>
               ))
             )}
