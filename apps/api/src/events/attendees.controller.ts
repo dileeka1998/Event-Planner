@@ -58,6 +58,28 @@ export class AttendeesRecommendationsController {
     return this.attendeesService.getDashboardData(userId);
   }
 
+  @Get('my-sessions')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all sessions from events user is registered for' })
+  @ApiResponse({ status: 200, description: 'Return sessions from registered events.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  getMySessions(@Request() req: any) {
+    const userId = req.user.userId;
+    return this.attendeesService.getMySessions(userId);
+  }
+
+  @Get('available-events')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get events user can register for (not yet registered, not started)' })
+  @ApiResponse({ status: 200, description: 'Return available events with capacity info.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  getAvailableEvents(@Request() req: any) {
+    const userId = req.user.userId;
+    return this.attendeesService.getAvailableEvents(userId);
+  }
+
   @Get('recommendations')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -65,6 +87,7 @@ export class AttendeesRecommendationsController {
   @ApiQuery({ name: 'topic', required: false, description: 'Filter by topic/category' })
   @ApiQuery({ name: 'day', required: false, description: 'Filter by day (Day 1, Day 2, or day of week)' })
   @ApiQuery({ name: 'track', required: false, description: 'Filter by track (same as topic for now)' })
+  @ApiQuery({ name: 'showAll', required: false, description: 'If true, show all sessions; if false, only show sessions from registered events', type: Boolean })
   @ApiResponse({ status: 200, description: 'Return recommended sessions.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   getRecommendations(
@@ -72,8 +95,10 @@ export class AttendeesRecommendationsController {
     @Query('topic') topic?: string,
     @Query('day') day?: string,
     @Query('track') track?: string,
+    @Query('showAll') showAll?: string,
   ) {
     const userId = req.user.userId;
-    return this.attendeesService.getRecommendedSessions(userId, { topic, day, track });
+    const showAllBool = showAll === 'true' || showAll === '1';
+    return this.attendeesService.getRecommendedSessions(userId, { topic, day, track, showAll: showAllBool });
   }
 }

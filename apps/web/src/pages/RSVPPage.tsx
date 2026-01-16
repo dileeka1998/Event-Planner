@@ -6,9 +6,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Label } from '../components/ui/label';
-import { Download, Calendar, Clock, MapPin, Loader2 } from 'lucide-react';
-import { EventAttendee, Event } from '../types';
-import { getEvents, getEventAttendees, leaveEvent, registerAttendee } from '../api';
+import { Download, Calendar, Clock, MapPin, Loader2, Users, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react';
+import { EventAttendee, Event, Session } from '../types';
+import { getEvents, getEventAttendees, leaveEvent, registerAttendee, getAvailableEvents, getMySessions, getEventSessions } from '../api';
 import { toast } from 'sonner';
 
 interface RSVPPageProps {
@@ -41,10 +41,17 @@ export function RSVPPage({ userRole }: RSVPPageProps) {
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
   const [attendees, setAttendees] = useState<EventAttendee[]>([]);
   const [loading, setLoading] = useState(false);
+  const [availableEvents, setAvailableEvents] = useState<Event[]>([]);
+  const [mySessions, setMySessions] = useState<Session[]>([]);
+  const [expandedEvents, setExpandedEvents] = useState<Set<number>>(new Set());
+  const [eventSessions, setEventSessions] = useState<Map<number, Session[]>>(new Map());
+  const [registeringEventId, setRegisteringEventId] = useState<number | null>(null);
 
   useEffect(() => {
     if (userRole === 'Attendee') {
       fetchMyRegistrations();
+      fetchAvailableEvents();
+      fetchMySessions();
     } else {
       fetchEvents();
     }
@@ -118,13 +125,67 @@ export function RSVPPage({ userRole }: RSVPPageProps) {
     }
   };
 
+  const fetchAvailableEvents = async () => {
+    try {
+      const { data } = await getAvailableEvents();
+      setAvailableEvents(data);
+    } catch (error: any) {
+      console.error('Failed to fetch available events', error);
+    }
+  };
+
+  const fetchMySessions = async () => {
+    try {
+      const { data } = await getMySessions();
+      setMySessions(data.map((s: any) => ({
+        ...s,
+        time: s.startTime ? new Date(s.startTime).toLocaleTimeString() : undefined,
+        room: s.room?.name || null,
+      })));
+    } catch (error: any) {
+      console.error('Failed to fetch my sessions', error);
+    }
+  };
+
+  const fetchEventSessions = async (eventId: number) => {
+    if (eventSessions.has(eventId)) {
+      return; // Already loaded
+    }
+    try {
+      const { data } = await getEventSessions(eventId);
+      setEventSessions(prev => new Map(prev).set(eventId, data.map((s: any) => ({
+        ...s,
+        time: s.startTime ? new Date(s.startTime).toLocaleTimeString() : undefined,
+        room: s.room?.name || null,
+      }))));
+    } catch (error: any) {
+      console.error(`Failed to fetch sessions for event ${eventId}`, error);
+    }
+  };
+
+  const toggleEventExpansion = (eventId: number) => {
+    const newExpanded = new Set(expandedEvents);
+    if (newExpanded.has(eventId)) {
+      newExpanded.delete(eventId);
+    } else {
+      newExpanded.add(eventId);
+      fetchEventSessions(eventId);
+    }
+    setExpandedEvents(newExpanded);
+  };
+
   const handleRegister = async (eventId: number) => {
+    setRegisteringEventId(eventId);
     try {
       await registerAttendee(eventId);
       toast.success('Successfully registered for event!');
       await fetchMyRegistrations();
+      await fetchAvailableEvents();
+      await fetchMySessions();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Failed to register for event');
+    } finally {
+      setRegisteringEventId(null);
     }
   };
 
@@ -170,12 +231,87 @@ export function RSVPPage({ userRole }: RSVPPageProps) {
           <p className="text-gray-600">View and manage your event registrations</p>
         </div>
 
-        <Tabs defaultValue="upcoming">
+        <Tabs defaultValue="browse">
           <TabsList>
+            <TabsTrigger value="browse">Browse Events</TabsTrigger>
             <TabsTrigger value="upcoming">Upcoming Events</TabsTrigger>
+            <TabsTrigger value="my-sessions">My Sessions</TabsTrigger>
             <TabsTrigger value="waitlist">Waitlist</TabsTrigger>
             <TabsTrigger value="past">Past Events</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="browse" className="space-y-3 mt-6">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+              </div>
+            ) : availableEvents.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No available events to register for</p>
+                <p className="text-sm mt-2">All upcoming events have been registered or have already started</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {availableEvents.map((event: any) => {
+                  const isPast = new Date(event.startDate) < new Date();
+                  const isRegistering = registeringEventId === event.id;
+                  return (
+                    <Card key={event.id} className="hover:shadow-md transition-shadow">
+                      <CardContent className="p-6">
+                        <h3 className="text-gray-900 font-medium mb-3">{event.title}</h3>
+                        <div className="space-y-2 text-sm text-gray-600 mb-4">
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-4 h-4" />
+                            <span>
+                              {new Date(event.startDate).toLocaleDateString()}
+                              {event.startDate !== event.endDate && ` - ${new Date(event.endDate).toLocaleDateString()}`}
+                            </span>
+                          </div>
+                          {event.venue && (
+                            <div className="flex items-center gap-2">
+                              <MapPin className="w-4 h-4" />
+                              <span>{event.venue.name}</span>
+                            </div>
+                          )}
+                          {event.capacity > 0 && (
+                            <div className="flex items-center gap-2">
+                              <Users className="w-4 h-4" />
+                              <span>
+                                {event.availableSpots !== null 
+                                  ? `${event.availableSpots} spots remaining`
+                                  : `${event.confirmedCount} / ${event.capacity} registered`}
+                                {event.isFull && <span className="text-yellow-600 ml-1">(Full - Join Waitlist)</span>}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          onClick={() => handleRegister(event.id)}
+                          disabled={isPast || isRegistering}
+                          className="w-full"
+                          variant={isPast ? 'outline' : 'default'}
+                        >
+                          {isRegistering ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Registering...
+                            </>
+                          ) : isPast ? (
+                            'Event Ended'
+                          ) : event.isFull ? (
+                            'Join Waitlist'
+                          ) : (
+                            'Register for Event'
+                          )}
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </TabsContent>
 
           <TabsContent value="upcoming" className="space-y-3 mt-6">
             {loading ? (
@@ -190,6 +326,8 @@ export function RSVPPage({ userRole }: RSVPPageProps) {
             ) : (
               confirmed.map((registration) => {
                 const event = registration.event;
+                const isExpanded = expandedEvents.has(event?.id || 0);
+                const sessions = eventSessions.get(event?.id || 0) || [];
                 return (
                   <Card key={registration.id} className="hover:shadow-md transition-shadow">
                     <CardContent className="p-6">
@@ -200,6 +338,11 @@ export function RSVPPage({ userRole }: RSVPPageProps) {
                             <Badge className={`${getStatusColor(registration.status)} text-white`}>
                               {getStatusDisplay(registration.status)}
                             </Badge>
+                            {sessions.length > 0 && (
+                              <Badge variant="outline" className="text-xs">
+                                {sessions.length} session{sessions.length !== 1 ? 's' : ''}
+                              </Badge>
+                            )}
                           </div>
                           <div className="grid grid-cols-3 gap-4 text-sm text-gray-600">
                             <div className="flex items-center gap-2">
@@ -216,8 +359,58 @@ export function RSVPPage({ userRole }: RSVPPageProps) {
                               <span>Expected: {event?.expectedAudience || 0} attendees</span>
                             </div>
                           </div>
+                          {isExpanded && sessions.length > 0 && (
+                            <div className="mt-4 pt-4 border-t">
+                              <h4 className="text-sm font-medium text-gray-900 mb-3">Sessions</h4>
+                              <div className="space-y-2">
+                                {sessions.map((session: Session) => (
+                                  <div key={session.id} className="flex items-start gap-3 p-2 bg-gray-50 rounded">
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium text-gray-900">{session.title}</p>
+                                      {session.speaker && (
+                                        <p className="text-xs text-gray-600">{session.speaker}</p>
+                                      )}
+                                      <div className="flex items-center gap-3 mt-1 text-xs text-gray-600">
+                                        {session.time && (
+                                          <div className="flex items-center gap-1">
+                                            <Clock className="w-3 h-3" />
+                                            <span>{session.time}</span>
+                                          </div>
+                                        )}
+                                        {session.room && (
+                                          <div className="flex items-center gap-1">
+                                            <MapPin className="w-3 h-3" />
+                                            <span>{session.room}</span>
+                                          </div>
+                                        )}
+                                        <span>{session.durationMin} min</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex flex-col gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => toggleEventExpansion(event?.id || 0)}
+                            className="text-sm"
+                          >
+                            {isExpanded ? (
+                              <>
+                                <ChevronUp className="w-4 h-4 mr-1" />
+                                Hide Sessions
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="w-4 h-4 mr-1" />
+                                View Sessions
+                              </>
+                            )}
+                          </Button>
                           <Button 
                             variant="outline" 
                             size="sm"
@@ -288,6 +481,60 @@ export function RSVPPage({ userRole }: RSVPPageProps) {
                   </Card>
                 );
               })
+            )}
+          </TabsContent>
+
+          <TabsContent value="my-sessions" className="space-y-3 mt-6">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+              </div>
+            ) : mySessions.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No sessions scheduled</p>
+                <p className="text-sm mt-2">Register for events to see their sessions</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {mySessions.map((session: Session) => (
+                  <Card key={session.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="text-gray-900 font-medium mb-2">{session.title}</h3>
+                          {session.speaker && (
+                            <p className="text-sm text-gray-600 mb-2">{session.speaker}</p>
+                          )}
+                          <div className="flex items-center gap-4 text-sm text-gray-600">
+                            {session.time && (
+                              <div className="flex items-center gap-1">
+                                <Clock className="w-4 h-4" />
+                                <span>{session.time}</span>
+                              </div>
+                            )}
+                            {session.room && (
+                              <div className="flex items-center gap-1">
+                                <MapPin className="w-4 h-4" />
+                                <span>{session.room}</span>
+                              </div>
+                            )}
+                            <span>{session.durationMin} min</span>
+                          </div>
+                          {session.event && (
+                            <div className="mt-2">
+                              <Badge variant="outline" className="text-xs">
+                                <Calendar className="w-3 h-3 inline mr-1" />
+                                {session.event.title}
+                              </Badge>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             )}
           </TabsContent>
 

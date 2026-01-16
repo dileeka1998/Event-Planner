@@ -188,7 +188,7 @@ export default function App() {
       case 'attendees':
         return <AttendeesPage />;
       case 'recommendations':
-        return <RecommendationsPage />;
+        return <RecommendationsPage onNavigate={handleNavigate} />;
       case 'rsvp':
         return <RSVPPage userRole={currentUser.role === 'ATTENDEE' ? 'Attendee' : 'Organizer'} />;
       case 'admin':

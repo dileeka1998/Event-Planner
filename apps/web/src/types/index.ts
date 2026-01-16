@@ -69,6 +69,10 @@ export interface Session {
   expectedAudience?: number;
   time?: string;
   matchScore?: number;
+  // Registration status
+  eventId?: number;
+  isEventRegistered?: boolean;
+  eventRegistrationStatus?: 'CONFIRMED' | 'WAITLISTED' | null;
 }
 
 export interface Room {

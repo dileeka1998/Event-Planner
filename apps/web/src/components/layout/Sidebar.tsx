@@ -73,12 +73,14 @@ export function Sidebar({ currentPage, onNavigate, userRole }: SidebarProps) {
         })}
       </nav>
 
-      <div className="p-4 border-t border-gray-200">
-        <div className="bg-gradient-to-br from-[#0F6AB4] to-[#28A9A1] rounded-lg p-4 text-white">
-          <p className="text-xs opacity-90 mb-1">Pro Tip</p>
-          <p className="text-sm">Use AI Scheduler to automatically optimize your event timetable</p>
+      {userRole !== 'Attendee' && (
+        <div className="p-4 border-t border-gray-200">
+          <div className="bg-gradient-to-br from-[#0F6AB4] to-[#28A9A1] rounded-lg p-4 text-white">
+            <p className="text-xs opacity-90 mb-1">Pro Tip</p>
+            <p className="text-sm">Use AI Scheduler to automatically optimize your event timetable</p>
+          </div>
         </div>
-      </div>
+      )}
     </aside>
   );
 }

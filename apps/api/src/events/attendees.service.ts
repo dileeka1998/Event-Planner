@@ -338,9 +338,25 @@ export class AttendeesService {
 
   async getRecommendedSessions(
     userId: number,
-    filters?: { topic?: string; day?: string; track?: string }
+    filters?: { topic?: string; day?: string; track?: string; showAll?: boolean }
   ) {
     this.logger.log(`Fetching recommended sessions for user ${userId} with filters: ${JSON.stringify(filters)}`);
+
+    // Get user's event registrations
+    const userRegistrations = await this.attendeeRepo.find({
+      where: [
+        { userId, status: AttendeeStatus.CONFIRMED },
+        { userId, status: AttendeeStatus.WAITLISTED },
+      ],
+    });
+
+    const registeredEventIds = userRegistrations.map(reg => reg.eventId);
+    const registrationMap = new Map<number, AttendeeStatus>();
+    userRegistrations.forEach(reg => {
+      registrationMap.set(reg.eventId, reg.status);
+    });
+
+    this.logger.log(`User ${userId} is registered for ${registeredEventIds.length} events`);
 
     // Fetch all sessions with relations
     const allSessions = await this.sessionRepo.find({
@@ -354,8 +370,31 @@ export class AttendeesService {
       return [];
     }
 
+    // Filter by registered events if showAll is false (default)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let sessionsToProcess = allSessions;
+    if (!filters?.showAll) {
+      // Only show sessions from registered events
+      if (registeredEventIds.length > 0) {
+        sessionsToProcess = allSessions.filter(s => registeredEventIds.includes(s.event.id));
+      } else {
+        // No registered events, return empty array
+        this.logger.log('User has no registered events and showAll is false. Returning empty array.');
+        return [];
+      }
+    }
+
+    // Filter out sessions from events that have started
+    sessionsToProcess = sessionsToProcess.filter(s => {
+      const eventStart = new Date(s.event.startDate);
+      eventStart.setHours(0, 0, 0, 0);
+      return eventStart >= today;
+    });
+
     // Process sessions with topic and day information
-    const processedSessions = allSessions.map((session) => {
+    const processedSessions = sessionsToProcess.map((session) => {
       // Use stored topic if available, otherwise extract from title
       const topic = session.topic || this.extractTopicFromTitle(session.title);
       const dayInfo = this.calculateDayInfo(session.startTime, session.event.startDate);
@@ -400,16 +439,82 @@ export class AttendeesService {
 
     this.logger.log(`Returning ${filteredSessions.length} filtered sessions`);
 
+    // Format response with registration status
+    return filteredSessions.map((session) => {
+      const eventId = session.event.id;
+      const isEventRegistered = registrationMap.has(eventId);
+      const eventRegistrationStatus = registrationMap.get(eventId) || null;
+
+      return {
+        id: session.id,
+        title: session.title,
+        speaker: session.speaker,
+        durationMin: session.durationMin,
+        startTime: session.startTime,
+        topic: session.topic,
+        dayNumber: session.dayNumber,
+        dayOfWeek: session.dayOfWeek,
+        capacity: session.capacity,
+        eventId: eventId,
+        isEventRegistered: isEventRegistered,
+        eventRegistrationStatus: eventRegistrationStatus,
+        event: {
+          id: session.event.id,
+          title: session.event.title,
+          startDate: session.event.startDate,
+          endDate: session.event.endDate,
+          expectedAudience: session.event.expectedAudience,
+        },
+        room: session.room ? {
+          id: session.room.id,
+          name: session.room.name,
+          capacity: session.room.capacity,
+        } : null,
+      };
+    });
+  }
+
+  async getMySessions(userId: number) {
+    this.logger.log(`Fetching sessions for user ${userId} from registered events`);
+
+    // Get user's event registrations (excluding CANCELLED)
+    const userRegistrations = await this.attendeeRepo.find({
+      where: [
+        { userId, status: AttendeeStatus.CONFIRMED },
+        { userId, status: AttendeeStatus.WAITLISTED },
+      ],
+    });
+
+    if (userRegistrations.length === 0) {
+      this.logger.log(`User ${userId} has no registered events. Returning empty array.`);
+      return [];
+    }
+
+    const registeredEventIds = userRegistrations.map(reg => reg.eventId);
+
+    // Get all sessions from registered events
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const sessions = await this.sessionRepo
+      .createQueryBuilder('session')
+      .leftJoinAndSelect('session.event', 'event')
+      .leftJoinAndSelect('session.room', 'room')
+      .where('session.eventId IN (:...eventIds)', { eventIds: registeredEventIds })
+      .andWhere('DATE(event.startDate) >= :today', { today: today.toISOString().split('T')[0] })
+      .orderBy('session.startTime', 'ASC')
+      .getMany();
+
+    this.logger.log(`Found ${sessions.length} sessions from ${registeredEventIds.length} registered events`);
+
     // Format response
-    return filteredSessions.map((session) => ({
+    return sessions.map(session => ({
       id: session.id,
       title: session.title,
       speaker: session.speaker,
       durationMin: session.durationMin,
       startTime: session.startTime,
       topic: session.topic,
-      dayNumber: session.dayNumber,
-      dayOfWeek: session.dayOfWeek,
       capacity: session.capacity,
       event: {
         id: session.event.id,
@@ -424,6 +529,67 @@ export class AttendeesService {
         capacity: session.room.capacity,
       } : null,
     }));
+  }
+
+  async getAvailableEvents(userId: number) {
+    this.logger.log(`Fetching available events for user ${userId}`);
+
+    // Get user's event registrations
+    const userRegistrations = await this.attendeeRepo.find({
+      where: [
+        { userId, status: AttendeeStatus.CONFIRMED },
+        { userId, status: AttendeeStatus.WAITLISTED },
+      ],
+    });
+
+    const registeredEventIds = userRegistrations.map(reg => reg.eventId);
+
+    // Get all events that haven't started
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const allEvents = await this.eventRepo.find({
+      relations: ['venue', 'organizer', 'attendees'],
+      order: { startDate: 'ASC' },
+    });
+
+    // Filter: exclude registered events and past events
+    const availableEvents = allEvents.filter(event => {
+      const eventStart = new Date(event.startDate);
+      eventStart.setHours(0, 0, 0, 0);
+      return !registeredEventIds.includes(event.id) && eventStart >= today;
+    });
+
+    this.logger.log(`Found ${availableEvents.length} available events for user ${userId}`);
+
+    // Format response with capacity info
+    return availableEvents.map(event => {
+      const confirmedCount = event.attendees?.filter(a => a.status === AttendeeStatus.CONFIRMED).length || 0;
+      const capacity = event.venue?.capacity || event.expectedAudience || 0;
+      const availableSpots = capacity > 0 ? Math.max(0, capacity - confirmedCount) : null;
+
+      return {
+        id: event.id,
+        title: event.title,
+        startDate: event.startDate,
+        endDate: event.endDate,
+        expectedAudience: event.expectedAudience,
+        venue: event.venue ? {
+          id: event.venue.id,
+          name: event.venue.name,
+          capacity: event.venue.capacity,
+        } : null,
+        organizer: {
+          id: event.organizer.id,
+          name: event.organizer.name,
+          email: event.organizer.email,
+        },
+        capacity: capacity,
+        confirmedCount: confirmedCount,
+        availableSpots: availableSpots,
+        isFull: capacity > 0 && confirmedCount >= capacity,
+      };
+    });
   }
 }
 
