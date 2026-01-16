@@ -151,6 +151,34 @@ export function SpeakersPage() {
       return;
     }
 
+    // Validate capacity
+    if (sessionForm.capacity < 0) {
+      toast.error('Capacity cannot be negative');
+      return;
+    }
+
+    // Calculate available capacity for validation
+    const selectedEvent = events.find(e => e.id === selectedEventId);
+    if (selectedEvent) {
+      const eventCapacity = selectedEvent.expectedAudience || 0;
+      const existingCapacitySum = sessions
+        .filter(s => !editingSession || s.id !== editingSession.id)
+        .reduce((sum, s) => sum + (s.capacity || 0), 0);
+      const availableCapacity = eventCapacity - existingCapacitySum;
+
+      if (sessionForm.capacity > availableCapacity) {
+        toast.error(
+          `Capacity (${sessionForm.capacity}) exceeds available capacity (${availableCapacity}). Event capacity: ${eventCapacity}, Already used: ${existingCapacitySum}`
+        );
+        return;
+      }
+
+      if (sessionForm.capacity > eventCapacity) {
+        toast.error(`Capacity (${sessionForm.capacity}) cannot exceed event capacity (${eventCapacity})`);
+        return;
+      }
+    }
+
     try {
       const sessionData = {
         title: sessionForm.title,
@@ -322,19 +350,37 @@ export function SpeakersPage() {
             </div>
             <div>
               <Label htmlFor="capacity">Capacity *</Label>
-              <Input
-                id="capacity"
-                type="number"
-                placeholder="0"
-                min="0"
-                value={sessionForm.capacity}
-                onChange={(e) => setSessionForm({ ...sessionForm, capacity: parseInt(e.target.value) || 0 })}
-              />
-              {selectedEventId && events.find(e => e.id === selectedEventId) && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Max: {events.find(e => e.id === selectedEventId)?.expectedAudience || 0} (Event capacity)
-                </p>
-              )}
+              {(() => {
+                const selectedEvent = selectedEventId ? events.find(e => e.id === selectedEventId) : null;
+                const eventCapacity = selectedEvent?.expectedAudience || 0;
+                const existingCapacitySum = sessions
+                  .filter(s => !editingSession || s.id !== editingSession.id)
+                  .reduce((sum, s) => sum + (s.capacity || 0), 0);
+                const availableCapacity = eventCapacity - existingCapacitySum;
+                const maxCapacity = availableCapacity;
+                
+                return (
+                  <>
+                    <Input
+                      id="capacity"
+                      type="number"
+                      placeholder="0"
+                      min="0"
+                      max={maxCapacity}
+                      value={sessionForm.capacity}
+                      onChange={(e) => setSessionForm({ ...sessionForm, capacity: parseInt(e.target.value) || 0 })}
+                    />
+                    {selectedEvent && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Available: {availableCapacity} / Event capacity: {eventCapacity}
+                        {existingCapacitySum > 0 && (
+                          <span className="ml-1">(Used: {existingCapacitySum})</span>
+                        )}
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
             </div>
             <div>
               <Label htmlFor="room">Room</Label>
@@ -397,6 +443,7 @@ export function SpeakersPage() {
                   <TableHead>Duration</TableHead>
                   <TableHead>Start Time</TableHead>
                   <TableHead>Room</TableHead>
+                  <TableHead>Capacity</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -422,6 +469,11 @@ export function SpeakersPage() {
                         : '-'}
                     </TableCell>
                     <TableCell>{session.room?.name || '-'}</TableCell>
+                    <TableCell>
+                      {session.capacity !== undefined && session.capacity !== null
+                        ? session.capacity
+                        : 0}
+                    </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
                         <Button

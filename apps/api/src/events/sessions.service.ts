@@ -62,11 +62,18 @@ export class SessionsService {
       }
     }
 
-    // Validate capacity doesn't exceed event expectedAudience
-    if (dto.capacity > event.expectedAudience) {
-      this.logger.warn(`Session capacity ${dto.capacity} exceeds event expectedAudience ${event.expectedAudience}`);
+    // Calculate available capacity (event capacity - sum of existing session capacities)
+    const existingSessions = await this.sessionRepo.find({
+      where: { event: { id: eventId } },
+    });
+    const existingCapacitySum = existingSessions.reduce((sum, s) => sum + (s.capacity || 0), 0);
+    const availableCapacity = event.expectedAudience - existingCapacitySum;
+
+    // Validate capacity doesn't exceed available capacity
+    if (dto.capacity > availableCapacity) {
+      this.logger.warn(`Session capacity ${dto.capacity} exceeds available capacity ${availableCapacity} (event capacity: ${event.expectedAudience}, used: ${existingCapacitySum})`);
       throw new BadRequestException(
-        `Session capacity (${dto.capacity}) cannot exceed event expected audience (${event.expectedAudience})`
+        `Session capacity (${dto.capacity}) cannot exceed available capacity (${availableCapacity}). Event capacity: ${event.expectedAudience}, Already used: ${existingCapacitySum}`
       );
     }
 
@@ -177,11 +184,20 @@ export class SessionsService {
       session.topic = dto.topic || 'General';
     }
     if (dto.capacity !== undefined) {
-      // Validate capacity doesn't exceed event expectedAudience
-      if (dto.capacity > event.expectedAudience) {
-        this.logger.warn(`Session capacity ${dto.capacity} exceeds event expectedAudience ${event.expectedAudience}`);
+      // Calculate available capacity (event capacity - sum of existing session capacities, excluding current session)
+      const existingSessions = await this.sessionRepo.find({
+        where: { event: { id: eventId } },
+      });
+      const existingCapacitySum = existingSessions
+        .filter(s => s.id !== sessionId) // Exclude current session being updated
+        .reduce((sum, s) => sum + (s.capacity || 0), 0);
+      const availableCapacity = event.expectedAudience - existingCapacitySum;
+
+      // Validate capacity doesn't exceed available capacity
+      if (dto.capacity > availableCapacity) {
+        this.logger.warn(`Session capacity ${dto.capacity} exceeds available capacity ${availableCapacity} (event capacity: ${event.expectedAudience}, used: ${existingCapacitySum})`);
         throw new BadRequestException(
-          `Session capacity (${dto.capacity}) cannot exceed event expected audience (${event.expectedAudience})`
+          `Session capacity (${dto.capacity}) cannot exceed available capacity (${availableCapacity}). Event capacity: ${event.expectedAudience}, Already used: ${existingCapacitySum}`
         );
       }
       session.capacity = dto.capacity;
