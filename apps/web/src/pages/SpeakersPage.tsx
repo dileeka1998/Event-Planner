@@ -92,7 +92,19 @@ export function SpeakersPage() {
         title: session.title,
         speaker: session.speaker || '',
         durationMin: session.durationMin,
-        startTime: session.startTime ? new Date(session.startTime).toISOString().slice(0, 16) : '',
+        startTime: session.startTime ? (() => {
+          // Convert UTC time from backend to local time for datetime-local input
+          // The backend returns UTC time (e.g., "2026-01-17T18:30:00.000Z")
+          // We need to convert it to local time for the datetime-local input
+          const utcDate = new Date(session.startTime);
+          // Get local date components (getFullYear, getMonth, etc. return local time values)
+          const year = utcDate.getFullYear();
+          const month = String(utcDate.getMonth() + 1).padStart(2, '0');
+          const day = String(utcDate.getDate()).padStart(2, '0');
+          const hours = String(utcDate.getHours()).padStart(2, '0');
+          const minutes = String(utcDate.getMinutes()).padStart(2, '0');
+          return `${year}-${month}-${day}T${hours}:${minutes}`;
+        })() : '',
         roomId: session.room?.id?.toString() || 'none',
         topic: session.topic || 'General',
         capacity: session.capacity || 0,
@@ -180,11 +192,26 @@ export function SpeakersPage() {
     }
 
     try {
+      // Convert datetime-local (local time) to ISO string (UTC) for backend
+      let startTimeISO: string | undefined = undefined;
+      if (sessionForm.startTime) {
+        // datetime-local input gives us a string like "2026-01-17T17:30" in local time
+        // Create a Date object - this will interpret it as local time
+        // Then convert to ISO string (UTC) for backend
+        const localDate = new Date(sessionForm.startTime);
+        // Check if date is valid
+        if (isNaN(localDate.getTime())) {
+          toast.error('Invalid date/time format');
+          return;
+        }
+        startTimeISO = localDate.toISOString();
+      }
+
       const sessionData = {
         title: sessionForm.title,
         speaker: sessionForm.speaker || undefined,
         durationMin: sessionForm.durationMin,
-        startTime: sessionForm.startTime || undefined,
+        startTime: startTimeISO,
         roomId: sessionForm.roomId && sessionForm.roomId !== 'none' ? parseInt(sessionForm.roomId) : undefined,
         topic: sessionForm.topic || 'General',
         capacity: sessionForm.capacity || 0,
@@ -460,12 +487,21 @@ export function SpeakersPage() {
                     <TableCell>{session.durationMin} min</TableCell>
                     <TableCell>
                       {session.startTime
-                        ? new Date(session.startTime).toLocaleString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
+                        ? (() => {
+                            // Parse UTC time from backend and display in local timezone
+                            // The backend returns UTC time (e.g., "2026-01-17T18:30:00.000Z")
+                            // new Date() automatically converts UTC to local time
+                            const date = new Date(session.startTime);
+                            return date.toLocaleString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: true,
+                              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                            });
+                          })()
                         : '-'}
                     </TableCell>
                     <TableCell>{session.room?.name || '-'}</TableCell>
