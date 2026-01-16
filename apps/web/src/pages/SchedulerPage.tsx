@@ -26,6 +26,7 @@ export function SchedulerPage() {
   const [editForm, setEditForm] = useState<{ roomId: string; startTime: string }>({ roomId: 'none', startTime: '' });
   const [showGapDialog, setShowGapDialog] = useState(false);
   const [gapMinutes, setGapMinutes] = useState(15);
+  const [eventStartTime, setEventStartTime] = useState('09:00'); // Default to 9:00 AM in local time
   const [previewAssignments, setPreviewAssignments] = useState<Array<{ sessionId: number; roomId?: number | null; startTime?: string | null }> | null>(null);
 
   useEffect(() => {
@@ -153,8 +154,29 @@ export function SchedulerPage() {
       // Store original sessions before generating preview
       setOriginalSessions([...sessions]);
       
+      // Convert local start time to UTC ISO string for backend
+      // eventStartTime is in format "HH:mm" (local time)
+      // We need to combine it with the event's start date and convert to UTC
+      let startTimeUTC: string | undefined = undefined;
+      if (selectedEvent && eventStartTime) {
+        const [hours, minutes] = eventStartTime.split(':').map(Number);
+        // Create a date using the event's start date and the local time
+        // This creates a Date object in local timezone
+        const localDateTimeString = `${selectedEvent.startDate}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+        const localDateTime = new Date(localDateTimeString);
+        
+        // Convert to UTC ISO string (format: "YYYY-MM-DDTHH:mm:ss" without Z, as AI expects)
+        // Use UTC methods to get the UTC representation
+        const year = localDateTime.getUTCFullYear();
+        const month = String(localDateTime.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(localDateTime.getUTCDate()).padStart(2, '0');
+        const utcHours = String(localDateTime.getUTCHours()).padStart(2, '0');
+        const utcMinutes = String(localDateTime.getUTCMinutes()).padStart(2, '0');
+        startTimeUTC = `${year}-${month}-${day}T${utcHours}:${utcMinutes}:00`;
+      }
+
       // Generate schedule in preview mode (dryRun: true)
-      const { data } = await generateSchedule(selectedEventId, gapMinutes, true);
+      const { data } = await generateSchedule(selectedEventId, gapMinutes, true, startTimeUTC);
       
       if (data.success && data.assignments) {
         setPreviewAssignments(data.assignments);
@@ -514,16 +536,31 @@ export function SchedulerPage() {
         </Card>
       )}
 
-      {/* Gap Time Dialog */}
+      {/* Schedule Generation Dialog */}
       <Dialog open={showGapDialog} onOpenChange={setShowGapDialog}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Gap Time Between Sessions</DialogTitle>
+            <DialogTitle>Schedule Settings</DialogTitle>
             <DialogDescription className="text-sm text-gray-600">
-              Set the rest time between sessions in the same room (rounded to nearest 5 minutes)
+              Configure the schedule generation parameters
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-4 space-y-4">
+            <div className="flex items-center gap-3">
+              <Label htmlFor="eventStartTime" className="text-sm font-medium whitespace-nowrap">
+                Start Time:
+              </Label>
+              <div className="flex-1 flex items-center gap-2">
+                <Input
+                  id="eventStartTime"
+                  type="time"
+                  value={eventStartTime}
+                  onChange={(e) => setEventStartTime(e.target.value)}
+                  className="w-32"
+                />
+                <span className="text-sm text-gray-500">(local time)</span>
+              </div>
+            </div>
             <div className="flex items-center gap-3">
               <Label htmlFor="gapMinutes" className="text-sm font-medium whitespace-nowrap">
                 Gap Time:

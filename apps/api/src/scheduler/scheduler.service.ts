@@ -18,7 +18,7 @@ export class SchedulerService {
     private aiService: AiService,
   ) {}
 
-  async generateSchedule(eventId: number, organizerId: number, gapMinutes: number = 0, dryRun: boolean = false) {
+  async generateSchedule(eventId: number, organizerId: number, gapMinutes: number = 0, dryRun: boolean = false, startTime?: string) {
     this.logger.log(`Generating schedule for event ${eventId} by organizer ${organizerId} with gap time: ${gapMinutes} minutes (dryRun: ${dryRun})`);
 
     // Fetch event with relations
@@ -51,6 +51,7 @@ export class SchedulerService {
       startDate: event.startDate,
       endDate: event.endDate,
       gapMinutes: gapMinutes,
+      startTime: startTime, // UTC start time (format: YYYY-MM-DDTHH:mm:ss)
       sessions: event.sessions.map((s) => ({
         id: s.id,
         title: s.title,

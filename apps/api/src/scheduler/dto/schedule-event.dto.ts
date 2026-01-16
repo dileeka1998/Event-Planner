@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsNumber, Min, Max, IsBoolean } from 'class-validator';
+import { IsOptional, IsNumber, Min, Max, IsBoolean, IsString } from 'class-validator';
 
 export class ScheduleEventRequestDto {
   @ApiPropertyOptional({ description: 'Gap time in minutes between sessions in the same room', default: 0, minimum: 0, maximum: 60 })
@@ -13,6 +13,11 @@ export class ScheduleEventRequestDto {
   @IsOptional()
   @IsBoolean()
   dryRun?: boolean;
+
+  @ApiPropertyOptional({ description: 'Event start time in UTC (format: YYYY-MM-DDTHH:mm:ss)', example: '2026-01-17T09:00:00' })
+  @IsOptional()
+  @IsString()
+  startTime?: string;
 }
 
 export class ScheduleEventResponseDto {

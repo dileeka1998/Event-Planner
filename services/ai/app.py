@@ -343,6 +343,7 @@ class ScheduleEventRequest(BaseModel):
     startDate: str  # ISO date string
     endDate: str  # ISO date string
     gapMinutes: Optional[int] = 0  # Gap time in minutes between sessions in same room
+    startTime: Optional[str] = None  # UTC start time (format: YYYY-MM-DDTHH:mm:ss), defaults to 9 AM if not provided
     sessions: List[Session]
     rooms: List[Room]
 
@@ -359,19 +360,33 @@ class ScheduleEventResponse(BaseModel):
     message: Optional[str] = None
 
 
-def generate_time_slots(start_date: str, end_date: str, slot_duration_minutes: int = 5) -> List[datetime]:
-    """Generate time slots from start_date to end_date, 9 AM to 5 PM each day."""
+def generate_time_slots(start_date: str, end_date: str, slot_duration_minutes: int = 5, start_time_str: Optional[str] = None) -> List[datetime]:
+    """Generate time slots from start_date to end_date, using provided start time or defaulting to 9 AM."""
     start = datetime.fromisoformat(start_date)
     end = datetime.fromisoformat(end_date)
     end = end.replace(hour=23, minute=59, second=59)  # End of day
+    
+    # Parse start time if provided (format: YYYY-MM-DDTHH:mm:ss in UTC)
+    # Extract hour and minute from the start time string
+    start_hour = 9  # Default to 9 AM
+    start_minute = 0
+    if start_time_str:
+        try:
+            # Parse the UTC datetime string and extract hour/minute
+            start_time_dt = datetime.fromisoformat(start_time_str.replace('Z', ''))
+            start_hour = start_time_dt.hour
+            start_minute = start_time_dt.minute
+        except (ValueError, AttributeError):
+            # If parsing fails, use default 9 AM
+            pass
     
     slots = []
     current_date = start.date()
     end_date_obj = end.date()
     
     while current_date <= end_date_obj:
-        # Start at 9 AM each day
-        current_time = datetime.combine(current_date, datetime.min.time().replace(hour=9))
+        # Start at the specified time (or 9 AM default) each day
+        current_time = datetime.combine(current_date, datetime.min.time().replace(hour=start_hour, minute=start_minute))
         # End at 5 PM each day
         day_end = datetime.combine(current_date, datetime.min.time().replace(hour=17))
         
@@ -404,9 +419,9 @@ def schedule_event(request: ScheduleEventRequest):
                 message="No rooms available for scheduling"
             )
         
-        # Generate time slots (5-minute intervals, 9 AM - 5 PM each day)
+        # Generate time slots (5-minute intervals, using provided start time or defaulting to 9 AM - 5 PM each day)
         slot_duration_minutes = 5
-        time_slots = generate_time_slots(request.startDate, request.endDate, slot_duration_minutes)
+        time_slots = generate_time_slots(request.startDate, request.endDate, slot_duration_minutes, request.startTime)
         
         if not time_slots:
             return ScheduleEventResponse(

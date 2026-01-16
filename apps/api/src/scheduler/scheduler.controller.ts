@@ -25,7 +25,7 @@ export class SchedulerController {
     @Request() req: any,
   ) {
     const organizerId = req.user.userId;
-    return this.schedulerService.generateSchedule(eventId, organizerId, dto.gapMinutes || 0, dto.dryRun || false);
+    return this.schedulerService.generateSchedule(eventId, organizerId, dto.gapMinutes || 0, dto.dryRun || false, dto.startTime);
   }
 
   @Post('apply')
