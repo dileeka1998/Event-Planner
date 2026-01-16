@@ -129,9 +129,9 @@ export const deleteSession = (eventId: number, sessionId: number) =>
 
 // Rooms
 export const getEventRooms = (eventId: number) => api.get(`/events/${eventId}/rooms`);
-export const createRoom = (eventId: number, data: { name: string; capacity: number; costPerHour: number }) =>
+export const createRoom = (eventId: number, data: { name: string; capacity: number }) =>
   api.post(`/events/${eventId}/rooms`, data);
-export const updateRoom = (eventId: number, roomId: number, data: Partial<{ name: string; capacity: number; costPerHour: number }>) =>
+export const updateRoom = (eventId: number, roomId: number, data: Partial<{ name: string; capacity: number }>) =>
   api.put(`/events/${eventId}/rooms/${roomId}`, data);
 export const deleteRoom = (eventId: number, roomId: number) =>
   api.delete(`/events/${eventId}/rooms/${roomId}`);

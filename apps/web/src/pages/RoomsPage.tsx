@@ -22,7 +22,6 @@ export function RoomsPage() {
   const [roomForm, setRoomForm] = useState({
     name: '',
     capacity: 0,
-    costPerHour: 0,
   });
 
   useEffect(() => {
@@ -72,14 +71,12 @@ export function RoomsPage() {
       setRoomForm({
         name: room.name,
         capacity: room.capacity,
-        costPerHour: parseFloat(room.costPerHour) || 0,
       });
     } else {
       setEditingRoom(null);
       setRoomForm({
         name: '',
         capacity: 0,
-        costPerHour: 0,
       });
     }
     setIsDialogOpen(true);
@@ -91,7 +88,6 @@ export function RoomsPage() {
     setRoomForm({
       name: '',
       capacity: 0,
-      costPerHour: 0,
     });
   };
 
@@ -108,11 +104,6 @@ export function RoomsPage() {
 
     if (roomForm.capacity < 1) {
       toast.error('Capacity must be at least 1');
-      return;
-    }
-
-    if (roomForm.costPerHour < 0) {
-      toast.error('Cost per hour cannot be negative');
       return;
     }
 
@@ -204,18 +195,6 @@ export function RoomsPage() {
                   </p>
                 )}
               </div>
-              <div>
-                <Label htmlFor="costPerHour">Cost Per Hour (LKR)</Label>
-                <Input
-                  id="costPerHour"
-                  type="number"
-                  placeholder="0.00"
-                  min="0"
-                  step="0.01"
-                  value={roomForm.costPerHour}
-                  onChange={(e) => setRoomForm({ ...roomForm, costPerHour: parseFloat(e.target.value) || 0 })}
-                />
-              </div>
               <div className="flex gap-2 justify-end">
                 <Button variant="outline" onClick={handleCloseDialog}>
                   Cancel
@@ -279,7 +258,6 @@ export function RoomsPage() {
                 <TableRow>
                   <TableHead>Room Name</TableHead>
                   <TableHead>Capacity</TableHead>
-                  <TableHead>Cost Per Hour (LKR)</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -288,7 +266,6 @@ export function RoomsPage() {
                   <TableRow key={room.id}>
                     <TableCell className="font-medium">{room.name}</TableCell>
                     <TableCell>{room.capacity}</TableCell>
-                    <TableCell>{parseFloat(room.costPerHour).toFixed(2)}</TableCell>
                     <TableCell>
                       <div className="flex gap-2">
                         <Button variant="ghost" size="sm" onClick={() => handleOpenDialog(room)}>

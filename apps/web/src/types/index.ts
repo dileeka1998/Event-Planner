@@ -75,7 +75,6 @@ export interface Room {
   id: number;
   name: string;
   capacity: number;
-  costPerHour: string;
   event: Event;
 }
 

@@ -11,9 +11,4 @@ export class CreateRoomDto {
   @IsNumber()
   @Min(1)
   capacity!: number;
-
-  @ApiProperty({ description: 'The cost per hour for the room', default: '0.00' })
-  @IsNumber()
-  @Min(0)
-  costPerHour!: number;
 }

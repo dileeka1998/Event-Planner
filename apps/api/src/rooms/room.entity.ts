@@ -9,5 +9,4 @@ export class Room {
   @OneToMany(() => Session, (session) => session.room) sessions!: Session[];
   @Column() name!: string;
   @Column({ type: 'int' }) capacity!: number;
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 }) costPerHour!: string;
 }

@@ -46,7 +46,6 @@ export class RoomsService {
       event,
       name: dto.name,
       capacity: dto.capacity,
-      costPerHour: dto.costPerHour.toString(),
     });
 
     const savedRoom = await this.roomRepo.save(room);
@@ -112,7 +111,6 @@ export class RoomsService {
 
     if (dto.name !== undefined) room.name = dto.name;
     if (dto.capacity !== undefined) room.capacity = dto.capacity;
-    if (dto.costPerHour !== undefined) room.costPerHour = dto.costPerHour.toString();
 
     const updatedRoom = await this.roomRepo.save(room);
     this.logger.log(`Room ${roomId} updated successfully`);
