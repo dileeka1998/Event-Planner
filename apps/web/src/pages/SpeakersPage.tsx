@@ -195,25 +195,25 @@ export function SpeakersPage() {
       return;
     }
 
-    // Calculate available capacity for validation
+    // Validate capacity: if room assigned, validate against room capacity, otherwise against event capacity
     const selectedEvent = events.find(e => e.id === selectedEventId);
     if (selectedEvent) {
-      const eventCapacity = selectedEvent.expectedAudience || 0;
-      const existingCapacitySum = sessions
-        .filter(s => !editingSession || s.id !== editingSession.id)
-        .reduce((sum, s) => sum + (s.capacity || 0), 0);
-      const availableCapacity = eventCapacity - existingCapacitySum;
-
-      if (sessionForm.capacity > availableCapacity) {
-        toast.error(
-          `Capacity (${sessionForm.capacity}) exceeds available capacity (${availableCapacity}). Event capacity: ${eventCapacity}, Already used: ${existingCapacitySum}`
-        );
-        return;
-      }
-
-      if (sessionForm.capacity > eventCapacity) {
-        toast.error(`Capacity (${sessionForm.capacity}) cannot exceed event capacity (${eventCapacity})`);
-        return;
+      const selectedRoomId = sessionForm.roomId && sessionForm.roomId !== 'none' ? parseInt(sessionForm.roomId) : null;
+      const selectedRoom = selectedRoomId ? rooms.find(r => r.id === selectedRoomId) : null;
+      
+      if (selectedRoom) {
+        // Session has a room - validate against room capacity
+        if (sessionForm.capacity > selectedRoom.capacity) {
+          toast.error(`Capacity (${sessionForm.capacity}) cannot exceed room capacity (${selectedRoom.capacity})`);
+          return;
+        }
+      } else {
+        // Session has no room - validate against event capacity
+        const eventCapacity = selectedEvent.expectedAudience || 0;
+        if (sessionForm.capacity > eventCapacity) {
+          toast.error(`Capacity (${sessionForm.capacity}) cannot exceed event capacity (${eventCapacity})`);
+          return;
+        }
       }
     }
 
@@ -406,12 +406,12 @@ export function SpeakersPage() {
               <Label htmlFor="capacity">Capacity *</Label>
               {(() => {
                 const selectedEvent = selectedEventId ? events.find(e => e.id === selectedEventId) : null;
-                const eventCapacity = selectedEvent?.expectedAudience || 0;
-                const existingCapacitySum = sessions
-                  .filter(s => !editingSession || s.id !== editingSession.id)
-                  .reduce((sum, s) => sum + (s.capacity || 0), 0);
-                const availableCapacity = eventCapacity - existingCapacitySum;
-                const maxCapacity = availableCapacity;
+                const selectedRoomId = sessionForm.roomId && sessionForm.roomId !== 'none' ? parseInt(sessionForm.roomId) : null;
+                const selectedRoom = selectedRoomId ? rooms.find(r => r.id === selectedRoomId) : null;
+                
+                // If room is selected, use room capacity; otherwise use event capacity
+                const maxCapacity = selectedRoom ? selectedRoom.capacity : (selectedEvent?.expectedAudience || 0);
+                const capacityLabel = selectedRoom ? 'Room capacity' : 'Event capacity';
                 
                 return (
                   <>
@@ -426,9 +426,9 @@ export function SpeakersPage() {
                     />
                     {selectedEvent && (
                       <p className="text-xs text-gray-500 mt-1">
-                        Available: {availableCapacity} / Event capacity: {eventCapacity}
-                        {existingCapacitySum > 0 && (
-                          <span className="ml-1">(Used: {existingCapacitySum})</span>
+                        Max capacity: {maxCapacity} ({capacityLabel})
+                        {selectedRoom && (
+                          <span className="ml-1">- {selectedRoom.name}</span>
                         )}
                       </p>
                     )}

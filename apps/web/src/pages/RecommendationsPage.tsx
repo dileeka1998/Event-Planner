@@ -3,17 +3,22 @@ import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Clock, MapPin, User, Grid3x3, List, Sparkles } from 'lucide-react';
+import { Clock, MapPin, User, Grid3x3, List, Sparkles, Calendar, ArrowRight } from 'lucide-react';
 import { Session } from '../types';
 import { getRecommendedSessions } from '../api';
 import { toast } from 'sonner';
 import { SESSION_TOPICS } from '../constants/topics';
 
-export function RecommendationsPage() {
+interface RecommendationsPageProps {
+  onNavigate?: (page: string) => void;
+}
+
+export function RecommendationsPage({ onNavigate }: RecommendationsPageProps = {}) {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedTopic, setSelectedTopic] = useState('all');
   const [selectedDay, setSelectedDay] = useState('all');
   const [selectedTrack, setSelectedTrack] = useState('all');
+  const [showAll, setShowAll] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [allSessions, setAllSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(false);
@@ -28,12 +33,15 @@ export function RecommendationsPage() {
 
   const fetchAllSessions = async () => {
     try {
-      const { data } = await getRecommendedSessions();
+      const { data } = await getRecommendedSessions({ showAll: true });
       const processedSessions: Session[] = data.map((s: any) => ({
         ...s,
         time: s.startTime ? new Date(s.startTime).toLocaleTimeString() : undefined,
         room: s.room?.name || null,
         expectedAudience: s.event?.expectedAudience,
+        isEventRegistered: s.isEventRegistered,
+        eventRegistrationStatus: s.eventRegistrationStatus,
+        eventId: s.eventId,
       }));
       setAllSessions(processedSessions);
     } catch (error: any) {
@@ -44,10 +52,11 @@ export function RecommendationsPage() {
   const fetchSessions = async () => {
     setLoading(true);
     try {
-      const filters: { topic?: string; day?: string; track?: string } = {};
+      const filters: { topic?: string; day?: string; track?: string; showAll?: boolean } = {};
       if (selectedTopic !== 'all') filters.topic = selectedTopic;
       if (selectedDay !== 'all') filters.day = selectedDay;
       if (selectedTrack !== 'all') filters.track = selectedTrack;
+      filters.showAll = showAll;
 
       const { data } = await getRecommendedSessions(filters);
       const processedSessions: Session[] = data.map((s: any) => ({
@@ -56,6 +65,9 @@ export function RecommendationsPage() {
         room: s.room?.name || null,
         expectedAudience: s.event?.expectedAudience,
         capacity: s.capacity,
+        isEventRegistered: s.isEventRegistered,
+        eventRegistrationStatus: s.eventRegistrationStatus,
+        eventId: s.eventId,
       }));
       setSessions(processedSessions);
     } catch (error: any) {
@@ -65,6 +77,10 @@ export function RecommendationsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchSessions();
+  }, [showAll]);
 
   const getMatchColor = (score: number) => {
     if (score >= 90) return 'bg-green-500';
@@ -92,6 +108,20 @@ export function RecommendationsPage() {
 
       {/* Filter Bar */}
       <div className="flex items-center gap-4 flex-wrap">
+        <Button
+          variant={showAll ? 'outline' : 'default'}
+          size="sm"
+          onClick={() => setShowAll(false)}
+        >
+          My Events' Sessions
+        </Button>
+        <Button
+          variant={showAll ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setShowAll(true)}
+        >
+          Show All Sessions
+        </Button>
         <Select value={selectedTopic} onValueChange={setSelectedTopic}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Filter by topic" />
@@ -153,10 +183,21 @@ export function RecommendationsPage() {
             <Sparkles className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-gray-900 mb-2">No sessions available</h3>
             <p className="text-gray-600">
-              {sessions.length === 0 
+              {!showAll && sessions.length === 0
+                ? 'Register for events to see their sessions'
+                : sessions.length === 0 
                 ? 'Sessions will appear here once events are created with sessions'
                 : 'No sessions match your selected filter'}
             </p>
+            {!showAll && sessions.length === 0 && (
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={() => onNavigate?.('rsvp')}
+              >
+                Browse Events
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : viewMode === 'grid' ? (
@@ -166,12 +207,44 @@ export function RecommendationsPage() {
               <CardContent className="p-6">
                 <div className="flex items-start justify-between mb-3">
                   <h3 className="text-gray-900 font-medium flex-1">{session.title}</h3>
-                  {session.matchScore && (
-                    <Badge className={`${getMatchColor(session.matchScore)} text-white text-xs`}>
-                      {session.matchScore}% match
-                    </Badge>
-                  )}
+                  <div className="flex gap-2">
+                    {session.isEventRegistered && (
+                      <Badge className={session.eventRegistrationStatus === 'CONFIRMED' ? 'bg-green-500 text-white text-xs' : 'bg-yellow-500 text-white text-xs'}>
+                        {session.eventRegistrationStatus === 'CONFIRMED' ? 'Registered' : 'Waitlisted'}
+                      </Badge>
+                    )}
+                    {!session.isEventRegistered && showAll && (
+                      <Badge variant="outline" className="text-xs">
+                        Not Registered
+                      </Badge>
+                    )}
+                    {session.matchScore && (
+                      <Badge className={`${getMatchColor(session.matchScore)} text-white text-xs`}>
+                        {session.matchScore}% match
+                      </Badge>
+                    )}
+                  </div>
                 </div>
+                {session.event && (
+                  <div className="mb-2">
+                    <Badge variant="outline" className="text-xs">
+                      <Calendar className="w-3 h-3 inline mr-1" />
+                      Part of {session.event.title}
+                    </Badge>
+                  </div>
+                )}
+                {!session.isEventRegistered && showAll && (
+                  <div className="mb-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onNavigate?.('rsvp')}
+                      className="text-xs"
+                    >
+                      Register for Event <ArrowRight className="w-3 h-3 ml-1" />
+                    </Button>
+                  </div>
+                )}
                 {session.speaker && (
                   <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
                     <User className="w-4 h-4" />
@@ -220,6 +293,16 @@ export function RecommendationsPage() {
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="text-gray-900">{session.title}</h3>
+                      {session.isEventRegistered && (
+                        <Badge className={session.eventRegistrationStatus === 'CONFIRMED' ? 'bg-green-500 text-white text-xs' : 'bg-yellow-500 text-white text-xs'}>
+                          {session.eventRegistrationStatus === 'CONFIRMED' ? 'Registered' : 'Waitlisted'}
+                        </Badge>
+                      )}
+                      {!session.isEventRegistered && showAll && (
+                        <Badge variant="outline" className="text-xs">
+                          Not Registered
+                        </Badge>
+                      )}
                       {session.topic && (
                         <Badge variant="outline" className="text-xs">{session.topic}</Badge>
                       )}
@@ -229,6 +312,26 @@ export function RecommendationsPage() {
                         </Badge>
                       )}
                     </div>
+                    {session.event && (
+                      <div className="mb-2">
+                        <Badge variant="outline" className="text-xs">
+                          <Calendar className="w-3 h-3 inline mr-1" />
+                          Part of {session.event.title}
+                        </Badge>
+                      </div>
+                    )}
+                    {!session.isEventRegistered && showAll && (
+                      <div className="mb-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onNavigate?.('rsvp')}
+                          className="text-xs"
+                        >
+                          Register for Event <ArrowRight className="w-3 h-3 ml-1" />
+                        </Button>
+                      </div>
+                    )}
                     {session.speaker && (
                       <p className="text-sm text-gray-600 mb-2">{session.speaker}</p>
                     )}

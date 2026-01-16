@@ -102,13 +102,20 @@ export const updateUser = (id: number, data: any) =>
   api.patch(`/admin/users/${id}`, data);
 
 // Recommendations
-export const getRecommendedSessions = (filters?: { topic?: string; day?: string; track?: string }) => {
+export const getAttendeeDashboard = () => api.get('/attendees/dashboard');
+
+export const getRecommendedSessions = (filters?: { topic?: string; day?: string; track?: string; showAll?: boolean }) => {
   const params = new URLSearchParams();
   if (filters?.topic) params.append('topic', filters.topic);
   if (filters?.day) params.append('day', filters.day);
   if (filters?.track) params.append('track', filters.track);
+  if (filters?.showAll !== undefined) params.append('showAll', filters.showAll.toString());
   return api.get(`/attendees/recommendations?${params.toString()}`);
 };
+
+export const getMySessions = () => api.get('/attendees/my-sessions');
+
+export const getAvailableEvents = () => api.get('/attendees/available-events');
 
 // Sessions
 export const getEventSessions = (eventId: number) => api.get(`/events/${eventId}/sessions`);

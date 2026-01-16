@@ -125,7 +125,7 @@ export function OrganizerDashboard({ onNavigate }: OrganizerDashboardProps) {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Button 
           onClick={() => onNavigate('venues')} 
           className="h-20 bg-white border-2 border-[#0F6AB4] text-[#0F6AB4] hover:bg-[#0F6AB4] hover:text-white"
@@ -142,15 +142,6 @@ export function OrganizerDashboard({ onNavigate }: OrganizerDashboardProps) {
           <div className="flex flex-col items-center">
             <DollarSign className="w-6 h-6 mb-1" />
             <span>View Budget Report</span>
-          </div>
-        </Button>
-        <Button 
-          onClick={() => onNavigate('attendees')} 
-          className="h-20 bg-white border-2 border-[#8B5CF6] text-[#8B5CF6] hover:bg-[#8B5CF6] hover:text-white"
-        >
-          <div className="flex flex-col items-center">
-            <Users className="w-6 h-6 mb-1" />
-            <span>Invite Attendees</span>
           </div>
         </Button>
       </div>
