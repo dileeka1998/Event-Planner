@@ -233,16 +233,29 @@ export function SchedulerPage() {
         updateData.startTime = startTimeISO;
       }
 
+      // If preview is active, update preview assignments instead of saving to database
+      if (isPreviewActive && previewAssignments) {
+        // Update the preview assignments
+        const updatedAssignments = previewAssignments.map(assignment => {
+          if (assignment.sessionId === session.id) {
+            return {
+              ...assignment,
+              roomId: updateData.roomId !== undefined ? updateData.roomId : assignment.roomId,
+              startTime: updateData.startTime !== undefined ? updateData.startTime : assignment.startTime,
+            };
+          }
+          return assignment;
+        });
+        setPreviewAssignments(updatedAssignments);
+        toast.success('Preview updated');
+        setEditingSessionId(null);
+        return;
+      }
+
+      // If no preview, save directly to database
       await updateSession(selectedEventId, session.id, updateData);
       toast.success('Session updated successfully');
       setEditingSessionId(null);
-      
-      // Clear preview if active, since it's now out of sync
-      if (isPreviewActive) {
-        setPreviewAssignments(null);
-        toast.info('Schedule preview cleared due to manual edit');
-      }
-      
       await fetchEventDetails(selectedEventId);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Failed to update session');
