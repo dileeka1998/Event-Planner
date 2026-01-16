@@ -104,7 +104,13 @@ export function RSVPPage({ userRole }: RSVPPageProps) {
       const { data } = await getEvents();
       setEvents(data);
       if (data.length > 0 && !selectedEventId) {
-        setSelectedEventId(data[0].id);
+        // Sort events by startDate descending (latest first) and select the latest
+        const sortedEvents = [...data].sort((a, b) => {
+          const dateA = new Date(a.startDate).getTime();
+          const dateB = new Date(b.startDate).getTime();
+          return dateB - dateA; // Descending order (latest first)
+        });
+        setSelectedEventId(sortedEvents[0].id);
       }
     } catch (error: any) {
       toast.error('Failed to fetch events');
