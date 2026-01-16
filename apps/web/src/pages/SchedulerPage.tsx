@@ -363,31 +363,34 @@ export function SchedulerPage() {
 
       {/* Gap Time Dialog */}
       <Dialog open={showGapDialog} onOpenChange={setShowGapDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Set Gap Time Between Sessions</DialogTitle>
-            <DialogDescription>
-              How many minutes should be between sessions in the same room? This allows time for attendees to leave and setup for the next session.
+            <DialogTitle>Gap Time Between Sessions</DialogTitle>
+            <DialogDescription className="text-sm text-gray-600">
+              Set the rest time between sessions in the same room (rounded to nearest 5 minutes)
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label htmlFor="gapMinutes">Gap Time (minutes)</Label>
-              <Input
-                id="gapMinutes"
-                type="number"
-                min="0"
-                max="60"
-                value={gapMinutes}
-                onChange={(e) => setGapMinutes(parseInt(e.target.value) || 0)}
-                className="mt-2"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Recommended: 15-30 minutes. This ensures smooth transitions between sessions.
-              </p>
+          <div className="py-4">
+            <div className="flex items-center gap-3">
+              <Label htmlFor="gapMinutes" className="text-sm font-medium whitespace-nowrap">
+                Gap Time:
+              </Label>
+              <div className="flex-1 flex items-center gap-2">
+                <Input
+                  id="gapMinutes"
+                  type="number"
+                  min="0"
+                  max="60"
+                  step="5"
+                  value={gapMinutes}
+                  onChange={(e) => setGapMinutes(parseInt(e.target.value) || 0)}
+                  className="w-24 text-center"
+                />
+                <span className="text-sm text-gray-500">minutes</span>
+              </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowGapDialog(false)}>
               Cancel
             </Button>
@@ -396,7 +399,7 @@ export function SchedulerPage() {
               onClick={handleGenerateSchedule}
             >
               <Sparkles className="w-4 h-4 mr-2" />
-              Generate Schedule
+              Generate
             </Button>
           </DialogFooter>
         </DialogContent>
