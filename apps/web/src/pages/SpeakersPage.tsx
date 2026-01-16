@@ -111,11 +111,24 @@ export function SpeakersPage() {
       });
     } else {
       setEditingSession(null);
+      // Pre-fill start time with event's start date if available
+      let defaultStartTime = '';
+      if (selectedEventId) {
+        const selectedEvent = events.find(e => e.id === selectedEventId);
+        if (selectedEvent?.startDate) {
+          // Use event start date with a default time of 9:00 AM
+          const eventStartDate = new Date(selectedEvent.startDate);
+          const year = eventStartDate.getFullYear();
+          const month = String(eventStartDate.getMonth() + 1).padStart(2, '0');
+          const day = String(eventStartDate.getDate()).padStart(2, '0');
+          defaultStartTime = `${year}-${month}-${day}T09:00`;
+        }
+      }
       setSessionForm({
         title: '',
         speaker: '',
         durationMin: 60,
-        startTime: '',
+        startTime: defaultStartTime,
         roomId: 'none',
         topic: 'General',
         capacity: 0,
@@ -132,11 +145,24 @@ export function SpeakersPage() {
     if (open === false || open === undefined) {
       setIsDialogOpen(false);
       setEditingSession(null);
+      // Pre-fill start time with event's start date if available
+      let defaultStartTime = '';
+      if (selectedEventId) {
+        const selectedEvent = events.find(e => e.id === selectedEventId);
+        if (selectedEvent?.startDate) {
+          // Use event start date with a default time of 9:00 AM
+          const eventStartDate = new Date(selectedEvent.startDate);
+          const year = eventStartDate.getFullYear();
+          const month = String(eventStartDate.getMonth() + 1).padStart(2, '0');
+          const day = String(eventStartDate.getDate()).padStart(2, '0');
+          defaultStartTime = `${year}-${month}-${day}T09:00`;
+        }
+      }
       setSessionForm({
         title: '',
         speaker: '',
         durationMin: 60,
-        startTime: '',
+        startTime: defaultStartTime,
         roomId: 'none',
         topic: 'General',
         capacity: 0,
