@@ -50,6 +50,19 @@ export function SpeakersPage() {
     try {
       const { data } = await getEvents();
       setEvents(data);
+      
+      // Check for stored eventId first (from navigation)
+      const storedEventId = localStorage.getItem('selectedEventId');
+      if (storedEventId) {
+        const eventId = parseInt(storedEventId, 10);
+        if (!isNaN(eventId) && data.some(e => e.id === eventId)) {
+          setSelectedEventId(eventId);
+          localStorage.removeItem('selectedEventId');
+          return; // Don't set default if we found stored eventId
+        }
+      }
+      
+      // Otherwise, select first event if available
       if (data.length > 0 && !selectedEventId) {
         setSelectedEventId(data[0].id);
       }

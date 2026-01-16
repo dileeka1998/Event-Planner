@@ -174,7 +174,7 @@ export default function App() {
           </div>
         );
       case 'events':
-        return <EventsPage />;
+        return <EventsPage onNavigate={handleNavigate} />;
       case 'venues':
         return <VenuesPage />;
       case 'rooms':
