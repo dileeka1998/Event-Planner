@@ -115,7 +115,7 @@ export const getEventSessions = (eventId: number) => api.get(`/events/${eventId}
 
 export const createSession = (
   eventId: number,
-  data: { title: string; speaker?: string; durationMin: number; startTime?: string; roomId?: number; topic?: string }
+  data: { title: string; speaker?: string; durationMin: number; startTime?: string; roomId?: number; topic?: string; capacity?: number }
 ) => api.post(`/events/${eventId}/sessions`, data);
 
 export const updateSession = (
@@ -126,6 +126,15 @@ export const updateSession = (
 
 export const deleteSession = (eventId: number, sessionId: number) =>
   api.delete(`/events/${eventId}/sessions/${sessionId}`);
+
+// Rooms
+export const getEventRooms = (eventId: number) => api.get(`/events/${eventId}/rooms`);
+export const createRoom = (eventId: number, data: { name: string; capacity: number }) =>
+  api.post(`/events/${eventId}/rooms`, data);
+export const updateRoom = (eventId: number, roomId: number, data: Partial<{ name: string; capacity: number }>) =>
+  api.put(`/events/${eventId}/rooms/${roomId}`, data);
+export const deleteRoom = (eventId: number, roomId: number) =>
+  api.delete(`/events/${eventId}/rooms/${roomId}`);
 
 // AI
 export const parseBrief = (data: { text: string }) => aiApi.post('/parse-brief', data);

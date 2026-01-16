@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
 import { Event } from '@events/event.entity';
-import { Room } from '@events/room.entity';
+import { Room } from '../rooms/room.entity';
 
 @Entity('sessions')
 export class Session {

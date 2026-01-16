@@ -5,7 +5,7 @@ import { HttpModule } from '@nestjs/axios';
 import { User } from '@users/user.entity';
 import { Event } from '@events/event.entity';
 import { Session } from '@events/session.entity';
-import { Room } from '@events/room.entity';
+import { Room } from './rooms/room.entity';
 import { Venue } from '@events/venue.entity';
 import { EventBudget } from '@events/event-budget.entity';
 import { BudgetItem } from '@events/budget-item.entity';
@@ -13,6 +13,7 @@ import { EventAttendee } from '@events/event-attendee.entity';
 import { UsersModule } from '@users/users.module';
 import { EventsModule } from '@events/events.module';
 import { VenuesModule } from './venues/venues.module';
+import { RoomsModule } from './rooms/rooms.module';
 import { AiModule } from './ai/ai.module';
 import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
@@ -40,6 +41,7 @@ import { AdminModule } from './admin/admin.module';
     UsersModule,
     EventsModule,
     VenuesModule,
+    RoomsModule,
     AiModule,
     AdminModule,
   ],

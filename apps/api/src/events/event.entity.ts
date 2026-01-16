@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, OneToOne } from 'typeorm';
 import { User } from '@users/user.entity';
 import { Session } from '@events/session.entity';
-import { Room } from '@events/room.entity';
+import { Room } from '../rooms/room.entity';
 import { Venue } from './venue.entity';
 import { EventBudget } from './event-budget.entity';
 import { EventAttendee } from './event-attendee.entity';

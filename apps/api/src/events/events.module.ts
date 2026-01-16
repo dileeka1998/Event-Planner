@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Event } from './event.entity';
 import { Session } from './session.entity';
-import { Room } from './room.entity';
+import { Room } from '../rooms/room.entity';
 import { Venue } from './venue.entity';
 import { EventBudget } from './event-budget.entity';
 import { BudgetItem } from './budget-item.entity';

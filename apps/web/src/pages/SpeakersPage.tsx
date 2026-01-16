@@ -254,6 +254,7 @@ export function SpeakersPage() {
       handleCloseDialog();
       if (selectedEventId) {
         await fetchSessions(selectedEventId);
+        await fetchEventRooms(selectedEventId); // Refresh rooms list after session creation/update
       }
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Failed to save session');
