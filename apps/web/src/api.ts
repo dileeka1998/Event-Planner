@@ -139,5 +139,9 @@ export const deleteRoom = (eventId: number, roomId: number) =>
 // AI
 export const parseBrief = (data: { text: string }) => aiApi.post('/parse-brief', data);
 
+// Scheduler
+export const generateSchedule = (eventId: number, gapMinutes: number = 0) =>
+  api.post(`/events/${eventId}/schedule`, { gapMinutes });
+
 export default api;
 
