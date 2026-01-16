@@ -47,6 +47,17 @@ export class AttendeesController {
 export class AttendeesRecommendationsController {
   constructor(private readonly attendeesService: AttendeesService) {}
 
+  @Get('dashboard')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get dashboard data for authenticated attendee' })
+  @ApiResponse({ status: 200, description: 'Return dashboard data including statistics, upcoming events, and today sessions.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  getDashboard(@Request() req: any) {
+    const userId = req.user.userId;
+    return this.attendeesService.getDashboardData(userId);
+  }
+
   @Get('recommendations')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

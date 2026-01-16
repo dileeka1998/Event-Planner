@@ -134,6 +134,152 @@ export class AttendeesService {
     });
   }
 
+  async getDashboardData(userId: number) {
+    this.logger.log(`Fetching dashboard data for user ${userId}`);
+    
+    // Get all user registrations (excluding CANCELLED)
+    const allRegistrations = await this.attendeeRepo.find({
+      where: [
+        { userId, status: AttendeeStatus.CONFIRMED },
+        { userId, status: AttendeeStatus.WAITLISTED },
+      ],
+      relations: ['event', 'event.venue'],
+      order: { joinedAt: 'DESC' },
+    });
+
+    // Calculate statistics
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const waitlistedCount = allRegistrations.filter(reg => reg.status === AttendeeStatus.WAITLISTED).length;
+
+    const upcomingEvents = allRegistrations
+      .filter(reg => {
+        const eventStart = new Date(reg.event.startDate);
+        eventStart.setHours(0, 0, 0, 0);
+        return eventStart >= today;
+      })
+      .map(reg => reg.event)
+      .filter((event, index, self) => self.findIndex(e => e.id === event.id) === index) // Remove duplicates
+      .sort((a, b) => {
+        const dateA = new Date(a.startDate).getTime();
+        const dateB = new Date(b.startDate).getTime();
+        return dateA - dateB; // ASC - soonest first
+      })
+      .slice(0, 3); // Next 3 events
+
+    // Get next event (soonest upcoming)
+    const nextEvent = upcomingEvents.length > 0 ? {
+      id: upcomingEvents[0].id,
+      title: upcomingEvents[0].title,
+      startDate: upcomingEvents[0].startDate,
+      venue: upcomingEvents[0].venue ? {
+        id: upcomingEvents[0].venue.id,
+        name: upcomingEvents[0].venue.name,
+      } : null,
+    } : undefined;
+
+    // Get today's sessions from registered events
+    const registeredEventIds = allRegistrations.map(reg => reg.eventId);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    let todaysSessions: Session[] = [];
+    // Only query if user has registered events (avoid SQL error with empty IN clause)
+    if (registeredEventIds.length > 0) {
+      todaysSessions = await this.sessionRepo
+        .createQueryBuilder('session')
+        .leftJoinAndSelect('session.event', 'event')
+        .leftJoinAndSelect('session.room', 'room')
+        .where('session.eventId IN (:...eventIds)', { eventIds: registeredEventIds })
+        .andWhere('session.startTime >= :todayStart', { todayStart })
+        .andWhere('session.startTime <= :todayEnd', { todayEnd })
+        .orderBy('session.startTime', 'ASC')
+        .getMany();
+    }
+
+    // Format sessions for response
+    const formattedSessions = todaysSessions.map(session => ({
+      id: session.id,
+      title: session.title,
+      speaker: session.speaker,
+      durationMin: session.durationMin,
+      startTime: session.startTime,
+      topic: session.topic,
+      capacity: session.capacity,
+      event: {
+        id: session.event.id,
+        title: session.event.title,
+        startDate: session.event.startDate,
+        endDate: session.event.endDate,
+      },
+      room: session.room ? {
+        id: session.room.id,
+        name: session.room.name,
+        capacity: session.room.capacity,
+      } : null,
+    }));
+
+    // Get recent registrations (last 5)
+    const recentRegistrations = allRegistrations
+      .sort((a, b) => {
+        const dateA = new Date(a.joinedAt).getTime();
+        const dateB = new Date(b.joinedAt).getTime();
+        return dateB - dateA; // DESC - most recent first
+      })
+      .slice(0, 5)
+      .map(reg => ({
+        id: reg.id,
+        eventId: reg.eventId,
+        userId: reg.userId,
+        status: reg.status,
+        joinedAt: reg.joinedAt,
+        event: {
+          id: reg.event.id,
+          title: reg.event.title,
+          startDate: reg.event.startDate,
+          endDate: reg.event.endDate,
+          venue: reg.event.venue ? {
+            id: reg.event.venue.id,
+            name: reg.event.venue.name,
+          } : null,
+        },
+      }));
+
+    // Format upcoming events for response
+    const formattedUpcomingEvents = upcomingEvents.map(event => ({
+      id: event.id,
+      title: event.title,
+      startDate: event.startDate,
+      endDate: event.endDate,
+      expectedAudience: event.expectedAudience,
+      venue: event.venue ? {
+        id: event.venue.id,
+        name: event.venue.name,
+        capacity: event.venue.capacity,
+      } : null,
+    }));
+
+    // Calculate statistics
+    const statistics = {
+      totalRegistered: allRegistrations.length,
+      upcomingCount: upcomingEvents.length,
+      waitlistedCount,
+      nextEvent,
+    };
+
+    this.logger.log(`Dashboard data for user ${userId}: ${statistics.totalRegistered} total registrations, ${statistics.upcomingCount} upcoming, ${formattedSessions.length} sessions today`);
+
+    return {
+      statistics,
+      upcomingEvents: formattedUpcomingEvents,
+      todaysSessions: formattedSessions,
+      recentRegistrations,
+    };
+  }
+
   private extractTopicFromTitle(title: string): string {
     const titleLower = title.toLowerCase();
     const topicKeywords: { [key: string]: string } = {

@@ -102,6 +102,8 @@ export const updateUser = (id: number, data: any) =>
   api.patch(`/admin/users/${id}`, data);
 
 // Recommendations
+export const getAttendeeDashboard = () => api.get('/attendees/dashboard');
+
 export const getRecommendedSessions = (filters?: { topic?: string; day?: string; track?: string }) => {
   const params = new URLSearchParams();
   if (filters?.topic) params.append('topic', filters.topic);

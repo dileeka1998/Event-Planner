@@ -4,6 +4,7 @@ import { LoginPage } from './pages/LoginPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OrganizerDashboard } from './pages/OrganizerDashboard';
+import { AttendeeDashboard } from './pages/AttendeeDashboard';
 import { EventsPage } from './pages/EventsPage';
 import { SpeakersPage } from './pages/SpeakersPage';
 import { SchedulerPage } from './pages/SchedulerPage';
@@ -155,16 +156,18 @@ export default function App() {
           console.log('Showing Organizer Dashboard');
           return <OrganizerDashboard onNavigate={handleNavigate} />;
         }
-        // For Admin and Attendee, show a simplified dashboard
-        console.log('Showing Attendee/Admin Dashboard, role:', userRole);
+        if (userRole === 'ATTENDEE') {
+          console.log('Showing Attendee Dashboard');
+          return <AttendeeDashboard onNavigate={handleNavigate} />;
+        }
+        // For Admin, show a simplified dashboard
+        console.log('Showing Admin Dashboard, role:', userRole);
         return (
           <div className="space-y-6">
             <div>
               <h1 className="text-gray-900 mb-2">Welcome back, {currentUser.name}!</h1>
               <p className="text-gray-600">
-                {userRole === 'ADMIN' 
-                  ? 'Access the Admin Panel to manage the system' 
-                  : 'Explore recommended sessions and manage your schedule'}
+                Access the Admin Panel to manage the system
               </p>
               <p className="text-xs text-gray-400 mt-2">Your role: {currentUser.role}</p>
             </div>
