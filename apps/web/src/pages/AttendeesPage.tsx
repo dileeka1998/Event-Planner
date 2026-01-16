@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { Users, Loader2 } from 'lucide-react';
 import { KPICard } from '../components/dashboard/KPICard';
 import { getEventAttendees, getEvents } from '../api';
+import { Label } from '@/components/ui/label';
 
 export function AttendeesPage() {
   const [attendees, setAttendees] = useState<Attendee[]>([]);

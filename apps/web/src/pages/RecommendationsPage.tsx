@@ -4,37 +4,60 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Clock, MapPin, User, Grid3x3, List, Sparkles } from 'lucide-react';
-import { Session, Event } from '../types';
-import { getEvents } from '../api';
+import { Session } from '../types';
+import { getRecommendedSessions } from '../api';
 import { toast } from 'sonner';
+import { SESSION_TOPICS } from '../constants/topics';
 
 export function RecommendationsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedTopic, setSelectedTopic] = useState('all');
+  const [selectedDay, setSelectedDay] = useState('all');
+  const [selectedTrack, setSelectedTrack] = useState('all');
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [allSessions, setAllSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetchSessions();
+    fetchAllSessions();
   }, []);
+
+  useEffect(() => {
+    fetchSessions();
+  }, [selectedTopic, selectedDay, selectedTrack]);
+
+  const fetchAllSessions = async () => {
+    try {
+      const { data } = await getRecommendedSessions();
+      const processedSessions: Session[] = data.map((s: any) => ({
+        ...s,
+        time: s.startTime ? new Date(s.startTime).toLocaleTimeString() : undefined,
+        room: s.room?.name || null,
+        expectedAudience: s.event?.expectedAudience,
+      }));
+      setAllSessions(processedSessions);
+    } catch (error: any) {
+      console.error('Failed to fetch all sessions for filters', error);
+    }
+  };
 
   const fetchSessions = async () => {
     setLoading(true);
     try {
-      const { data: events } = await getEvents();
-      const allSessions: Session[] = [];
-      events.forEach((event: Event) => {
-        if (event.sessions) {
-          allSessions.push(...event.sessions.map((s: any) => ({
-            ...s,
-            track: s.track || 'General',
-            expectedAudience: event.expectedAudience,
-            time: s.startTime ? new Date(s.startTime).toLocaleTimeString() : undefined,
-            room: s.room?.name,
-          })));
-        }
-      });
-      setSessions(allSessions);
+      const filters: { topic?: string; day?: string; track?: string } = {};
+      if (selectedTopic !== 'all') filters.topic = selectedTopic;
+      if (selectedDay !== 'all') filters.day = selectedDay;
+      if (selectedTrack !== 'all') filters.track = selectedTrack;
+
+      const { data } = await getRecommendedSessions(filters);
+      const processedSessions: Session[] = data.map((s: any) => ({
+        ...s,
+        time: s.startTime ? new Date(s.startTime).toLocaleTimeString() : undefined,
+        room: s.room?.name || null,
+        expectedAudience: s.event?.expectedAudience,
+        capacity: s.capacity,
+      }));
+      setSessions(processedSessions);
     } catch (error: any) {
       toast.error('Failed to fetch sessions');
       console.error(error);
@@ -50,12 +73,15 @@ export function RecommendationsPage() {
     return 'bg-gray-400';
   };
 
-  const filteredSessions = sessions.filter(session => {
-    if (selectedTopic === 'all') return true;
-    return session.track?.toLowerCase() === selectedTopic.toLowerCase();
-  });
-
-  const uniqueTracks = Array.from(new Set(sessions.map(s => s.track).filter(Boolean)));
+  // Extract unique values for filter dropdowns from all sessions
+  // Use predefined topics list to ensure consistency with session creation
+  const uniqueDays = Array.from(new Set(
+    allSessions
+      .map(s => s.dayNumber || s.dayOfWeek)
+      .filter(Boolean)
+      .sort()
+  ));
+  const uniqueTracks = Array.from(new Set(allSessions.map(s => s.topic).filter(Boolean)));
 
   return (
     <div className="space-y-6">
@@ -72,6 +98,28 @@ export function RecommendationsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Topics</SelectItem>
+            {SESSION_TOPICS.map(topic => (
+              <SelectItem key={topic} value={topic}>{topic}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={selectedDay} onValueChange={setSelectedDay}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Filter by day" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Days</SelectItem>
+            {uniqueDays.map(day => (
+              <SelectItem key={day} value={day}>{day}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={selectedTrack} onValueChange={setSelectedTrack}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Filter by track" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Tracks</SelectItem>
             {uniqueTracks.map(track => (
               <SelectItem key={track} value={track}>{track}</SelectItem>
             ))}
@@ -99,7 +147,7 @@ export function RecommendationsPage() {
         <div className="flex items-center justify-center py-12">
           <div className="text-gray-600">Loading sessions...</div>
         </div>
-      ) : filteredSessions.length === 0 ? (
+      ) : sessions.length === 0 ? (
         <Card>
           <CardContent className="p-12 text-center">
             <Sparkles className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -113,7 +161,7 @@ export function RecommendationsPage() {
         </Card>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredSessions.map((session) => (
+          {sessions.map((session) => (
             <Card key={session.id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-6">
                 <div className="flex items-start justify-between mb-3">
@@ -131,9 +179,9 @@ export function RecommendationsPage() {
                   </div>
                 )}
                 <div className="space-y-2 text-sm text-gray-600">
-                  {session.track && (
+                  {session.topic && (
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-xs">{session.track}</Badge>
+                      <Badge variant="outline" className="text-xs">{session.topic}</Badge>
                     </div>
                   )}
                   <div className="flex items-center gap-4">
@@ -153,6 +201,11 @@ export function RecommendationsPage() {
                   <div className="text-xs text-gray-500">
                     Duration: {session.durationMin || session.duration} min
                   </div>
+                  {session.capacity !== undefined && session.event?.expectedAudience && (
+                    <div className="text-xs text-gray-500">
+                      Capacity: {Math.round((session.capacity / session.event.expectedAudience) * 100)}% ({session.capacity}/{session.event.expectedAudience})
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -160,15 +213,15 @@ export function RecommendationsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredSessions.map((session) => (
+          {sessions.map((session) => (
             <Card key={session.id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-6">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="text-gray-900">{session.title}</h3>
-                      {session.track && (
-                        <Badge variant="outline" className="text-xs">{session.track}</Badge>
+                      {session.topic && (
+                        <Badge variant="outline" className="text-xs">{session.topic}</Badge>
                       )}
                       {session.matchScore && (
                         <Badge className={`${getMatchColor(session.matchScore)} text-white text-xs`}>
@@ -194,6 +247,11 @@ export function RecommendationsPage() {
                       )}
                       <span>{session.durationMin || session.duration} min</span>
                     </div>
+                    {session.capacity !== undefined && session.event?.expectedAudience && (
+                      <div className="text-xs text-gray-500">
+                        Capacity: {Math.round((session.capacity / session.event.expectedAudience) * 100)}% ({session.capacity}/{session.event.expectedAudience})
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardContent>
