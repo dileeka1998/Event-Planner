@@ -13,6 +13,7 @@ import { RSVPPage } from './pages/RSVPPage';
 import { AdminPanel } from './pages/AdminPanel';
 import { SettingsPage } from './pages/SettingsPage';
 import { VenuesPage } from './pages/VenuesPage';
+import { RoomsPage } from './pages/RoomsPage';
 import { AttendeesPage } from './pages/AttendeesPage';
 import { TeamPage } from './pages/TeamPage';
 import { User } from './types';
@@ -173,6 +174,8 @@ export default function App() {
         return <EventsPage />;
       case 'venues':
         return <VenuesPage />;
+      case 'rooms':
+        return <RoomsPage />;
       case 'speakers':
         return <SpeakersPage />;
       case 'scheduler':

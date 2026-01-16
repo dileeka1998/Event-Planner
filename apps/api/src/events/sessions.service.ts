@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Session } from './session.entity';
 import { Event } from './event.entity';
-import { Room } from './room.entity';
+import { Room } from '../rooms/room.entity';
 import { CreateSessionDto } from './dto/create-session.dto';
 
 @Injectable()

@@ -8,7 +8,8 @@ import {
   CheckSquare, 
   Settings,
   MapPin,
-  UserCheck
+  UserCheck,
+  Building2
 } from 'lucide-react';
 import { cn } from '../ui/utils';
 
@@ -23,6 +24,7 @@ export function Sidebar({ currentPage, onNavigate, userRole }: SidebarProps) {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Admin', 'Organizer', 'Attendee'] },
     { id: 'events', label: 'Events', icon: Calendar, roles: ['Admin', 'Organizer'] },
     { id: 'venues', label: 'Venues', icon: MapPin, roles: ['Admin', 'Organizer'] },
+    { id: 'rooms', label: 'Rooms', icon: Building2, roles: ['Organizer'] },
     { id: 'speakers', label: 'Speakers & Sessions', icon: Users, roles: ['Organizer'] },
     { id: 'scheduler', label: 'AI Scheduler', icon: Clock, roles: ['Organizer'] },
     { id: 'budget', label: 'Budget Overview', icon: DollarSign, roles: ['Organizer'] },
