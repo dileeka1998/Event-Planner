@@ -67,10 +67,25 @@ export function SchedulerPage() {
         ? rooms.find(r => r.id === assignment.roomId) || null
         : null;
 
+      // Convert preview assignment startTime (UTC string without Z) to proper ISO string
+      // The assignment.startTime is in format "2026-01-17T09:00:00" (UTC, no Z)
+      // We need to append Z to make it explicitly UTC, then create Date object and convert back to ISO
+      // This ensures formatDateTime will display it correctly in local time
+      let previewStartTime: string | null = null;
+      if (assignment.startTime) {
+        // If it doesn't have Z, append it to make it explicitly UTC
+        const utcTimeString = assignment.startTime.endsWith('Z') 
+          ? assignment.startTime 
+          : assignment.startTime + 'Z';
+        // Create Date object and convert back to ISO string for consistency
+        // This ensures formatDateTime will display it correctly in local time
+        previewStartTime = new Date(utcTimeString).toISOString();
+      }
+
       return {
         ...session,
         room: previewRoom,
-        startTime: assignment.startTime || null,
+        startTime: previewStartTime,
       };
     });
   })();
@@ -164,6 +179,7 @@ export function SchedulerPage() {
 
     setApplying(true);
     try {
+      console.log('Sending preview assignments to backend:', JSON.stringify(previewAssignments, null, 2));
       await applySchedule(selectedEventId, previewAssignments);
       toast.success('Schedule applied successfully');
       setPreviewAssignments(null);
