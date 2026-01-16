@@ -33,4 +33,54 @@ export class AiService {
       throw error;
     }
   }
+
+  async scheduleEvent(dto: {
+    eventId: number;
+    startDate: string;
+    endDate: string;
+    gapMinutes?: number;
+    sessions: Array<{
+      id: number;
+      title: string;
+      speaker?: string | null;
+      durationMin: number;
+      topic: string;
+      capacity: number;
+    }>;
+    rooms: Array<{
+      id: number;
+      name: string;
+      capacity: number;
+    }>;
+  }): Promise<{
+    assignments: Array<{
+      sessionId: number;
+      roomId?: number | null;
+      startTime?: string | null;
+    }>;
+    success: boolean;
+    message?: string;
+  }> {
+    this.logger.log(`Sending schedule request to AI service for event ${dto.eventId}`);
+    try {
+      const res = await firstValueFrom(this.http.post('/schedule-event', dto));
+      this.logger.log('Successfully generated schedule from AI service');
+      const data = res.data as {
+        assignments: Array<{
+          sessionId: number;
+          roomId?: number | null;
+          startTime?: string | null;
+        }>;
+        success: boolean;
+        message?: string;
+      };
+      this.logger.log(`Schedule generated - success: ${data.success}, assignments: ${data.assignments.length}`);
+      return data;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Failed to generate schedule from AI service: ${errorMessage}`, errorStack);
+      throw error;
+    }
+  }
 }
