@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from '../components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../components/ui/dialog';
 import { Event, Session, Room } from '../types';
-import { getEvents, getEvent, generateSchedule, updateSession, getEventSessions } from '../api';
+import { getEvents, getEvent, generateSchedule, applySchedule, updateSession, getEventSessions } from '../api';
 import { toast } from 'sonner';
 
 export function SchedulerPage() {
@@ -17,13 +17,16 @@ export function SchedulerPage() {
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [originalSessions, setOriginalSessions] = useState<Session[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [applying, setApplying] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<{ roomId: string; startTime: string }>({ roomId: 'none', startTime: '' });
   const [showGapDialog, setShowGapDialog] = useState(false);
   const [gapMinutes, setGapMinutes] = useState(15);
+  const [previewAssignments, setPreviewAssignments] = useState<Array<{ sessionId: number; roomId?: number | null; startTime?: string | null }> | null>(null);
 
   useEffect(() => {
     fetchEvents();
@@ -35,9 +38,44 @@ export function SchedulerPage() {
     } else {
       setSelectedEvent(null);
       setSessions([]);
+      setOriginalSessions([]);
       setRooms([]);
+      setPreviewAssignments(null);
     }
   }, [selectedEventId]);
+
+  // Compute display sessions (merge preview with original)
+  const displaySessions = (() => {
+    if (!previewAssignments || previewAssignments.length === 0) {
+      return sessions;
+    }
+
+    // Create a map of preview assignments by sessionId
+    const assignmentMap = new Map(
+      previewAssignments.map(a => [a.sessionId, a])
+    );
+
+    // Merge preview data with sessions
+    return sessions.map(session => {
+      const assignment = assignmentMap.get(session.id);
+      if (!assignment) {
+        return session;
+      }
+
+      // Create a new session object with preview data
+      const previewRoom = assignment.roomId 
+        ? rooms.find(r => r.id === assignment.roomId) || null
+        : null;
+
+      return {
+        ...session,
+        room: previewRoom,
+        startTime: assignment.startTime || null,
+      };
+    });
+  })();
+
+  const isPreviewActive = previewAssignments !== null;
 
   const fetchEvents = async () => {
     setLoading(true);
@@ -64,6 +102,9 @@ export function SchedulerPage() {
 
       const { data: sessionsData } = await getEventSessions(eventId);
       setSessions(sessionsData);
+      setOriginalSessions(sessionsData);
+      // Clear preview when fetching new event details
+      setPreviewAssignments(null);
     } catch (error: any) {
       toast.error('Failed to fetch event details');
       console.error(error);
@@ -75,6 +116,11 @@ export function SchedulerPage() {
   const handleGenerateScheduleClick = () => {
     if (!selectedEventId) {
       toast.error('Please select an event first');
+      return;
+    }
+    // Check if preview is active
+    if (previewAssignments !== null) {
+      toast.warning('Please confirm or cancel the current schedule preview before generating a new one');
       return;
     }
     setShowGapDialog(true);
@@ -89,16 +135,53 @@ export function SchedulerPage() {
     setShowGapDialog(false);
     setGenerating(true);
     try {
-      const { data } = await generateSchedule(selectedEventId, gapMinutes);
-      toast.success(data.message || 'Schedule generated successfully');
-      // Refresh event details to show updated schedule
-      await fetchEventDetails(selectedEventId);
+      // Store original sessions before generating preview
+      setOriginalSessions([...sessions]);
+      
+      // Generate schedule in preview mode (dryRun: true)
+      const { data } = await generateSchedule(selectedEventId, gapMinutes, true);
+      
+      if (data.success && data.assignments) {
+        setPreviewAssignments(data.assignments);
+        toast.success('Schedule preview generated. Review and click Confirm to apply.');
+      } else {
+        toast.error(data.message || 'Failed to generate schedule preview');
+        setPreviewAssignments(null);
+      }
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Failed to generate schedule');
       console.error(error);
+      setPreviewAssignments(null);
     } finally {
       setGenerating(false);
     }
+  };
+
+  const handleConfirmSchedule = async () => {
+    if (!selectedEventId || !previewAssignments) {
+      return;
+    }
+
+    setApplying(true);
+    try {
+      await applySchedule(selectedEventId, previewAssignments);
+      toast.success('Schedule applied successfully');
+      setPreviewAssignments(null);
+      // Refresh event details to show updated schedule
+      await fetchEventDetails(selectedEventId);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to apply schedule');
+      console.error(error);
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const handleCancelPreview = () => {
+    setPreviewAssignments(null);
+    // Restore original sessions display
+    setSessions([...originalSessions]);
+    toast.info('Schedule preview cancelled');
   };
 
   const handleStartEdit = (session: Session) => {
@@ -153,6 +236,13 @@ export function SchedulerPage() {
       await updateSession(selectedEventId, session.id, updateData);
       toast.success('Session updated successfully');
       setEditingSessionId(null);
+      
+      // Clear preview if active, since it's now out of sync
+      if (isPreviewActive) {
+        setPreviewAssignments(null);
+        toast.info('Schedule preview cleared due to manual edit');
+      }
+      
       await fetchEventDetails(selectedEventId);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Failed to update session');
@@ -183,7 +273,7 @@ export function SchedulerPage() {
         {selectedEvent && rooms.length > 0 && sessions.length > 0 && (
           <Button
             onClick={handleGenerateScheduleClick}
-            disabled={generating}
+            disabled={generating || isPreviewActive}
             className="bg-[#0F6AB4] hover:bg-[#0D5A9A]"
           >
             {generating ? (
@@ -208,8 +298,14 @@ export function SchedulerPage() {
               <Label htmlFor="event-select" className="text-sm font-medium">Select Event:</Label>
               <Select
                 value={selectedEventId?.toString() || ''}
-                onValueChange={(value) => setSelectedEventId(parseInt(value))}
-                disabled={loading}
+                onValueChange={(value) => {
+                  if (isPreviewActive) {
+                    toast.warning('Please confirm or cancel the schedule preview before changing events');
+                    return;
+                  }
+                  setSelectedEventId(parseInt(value));
+                }}
+                disabled={loading || isPreviewActive}
               >
                 <SelectTrigger className="w-64">
                   <SelectValue placeholder="Select an event" />
@@ -278,7 +374,7 @@ export function SchedulerPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sessions.map((session) => (
+                  {displaySessions.map((session) => (
                     <TableRow key={session.id}>
                       <TableCell className="font-medium">{session.title}</TableCell>
                       <TableCell>{session.speaker || '-'}</TableCell>
@@ -356,6 +452,34 @@ export function SchedulerPage() {
                   ))}
                 </TableBody>
               </Table>
+            )}
+            {isPreviewActive && (
+              <div className="mt-6 pt-4 border-t flex items-center justify-end gap-3">
+                <Button
+                  variant="outline"
+                  onClick={handleCancelPreview}
+                  disabled={applying}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="bg-[#0F6AB4] hover:bg-[#0D5A9A]"
+                  onClick={handleConfirmSchedule}
+                  disabled={applying}
+                >
+                  {applying ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Applying...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Confirm Schedule
+                    </>
+                  )}
+                </Button>
+              </div>
             )}
           </CardContent>
         </Card>

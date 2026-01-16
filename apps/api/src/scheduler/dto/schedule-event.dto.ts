@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsNumber, Min, Max } from 'class-validator';
+import { IsOptional, IsNumber, Min, Max, IsBoolean } from 'class-validator';
 
 export class ScheduleEventRequestDto {
   @ApiPropertyOptional({ description: 'Gap time in minutes between sessions in the same room', default: 0, minimum: 0, maximum: 60 })
@@ -8,6 +8,11 @@ export class ScheduleEventRequestDto {
   @Min(0)
   @Max(60)
   gapMinutes?: number;
+
+  @ApiPropertyOptional({ description: 'If true, generate schedule without saving to database (preview mode)', default: false })
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
 }
 
 export class ScheduleEventResponseDto {
@@ -30,4 +35,9 @@ export class ScheduleAssignmentDto {
 
   @ApiPropertyOptional({ description: 'Assigned start time (ISO datetime string)' })
   startTime?: string | null;
+}
+
+export class ScheduleApplyDto {
+  @ApiProperty({ description: 'List of session assignments to apply', type: [ScheduleAssignmentDto] })
+  assignments!: ScheduleAssignmentDto[];
 }

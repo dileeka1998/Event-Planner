@@ -18,8 +18,8 @@ export class SchedulerService {
     private aiService: AiService,
   ) {}
 
-  async generateSchedule(eventId: number, organizerId: number, gapMinutes: number = 0) {
-    this.logger.log(`Generating schedule for event ${eventId} by organizer ${organizerId} with gap time: ${gapMinutes} minutes`);
+  async generateSchedule(eventId: number, organizerId: number, gapMinutes: number = 0, dryRun: boolean = false) {
+    this.logger.log(`Generating schedule for event ${eventId} by organizer ${organizerId} with gap time: ${gapMinutes} minutes (dryRun: ${dryRun})`);
 
     // Fetch event with relations
     const event = await this.eventRepo.findOne({
@@ -81,6 +81,16 @@ export class SchedulerService {
       );
     }
 
+    // If dryRun, return assignments without saving
+    if (dryRun) {
+      this.logger.log(`Dry run: Returning schedule assignments without saving to database for event ${eventId}`);
+      return {
+        assignments: scheduleResponse.assignments,
+        success: true,
+        message: scheduleResponse.message || 'Schedule generated successfully (preview)',
+      };
+    }
+
     // Update sessions with assigned room and startTime
     const updatedSessions: Session[] = [];
     for (const assignment of scheduleResponse.assignments) {
@@ -113,6 +123,60 @@ export class SchedulerService {
       assignments: scheduleResponse.assignments,
       success: true,
       message: scheduleResponse.message || 'Schedule generated successfully',
+      sessions: updatedSessions,
+    };
+  }
+
+  async applySchedule(eventId: number, organizerId: number, assignments: Array<{ sessionId: number; roomId?: number | null; startTime?: string | null }>) {
+    this.logger.log(`Applying schedule for event ${eventId} by organizer ${organizerId}`);
+
+    // Fetch event with relations
+    const event = await this.eventRepo.findOne({
+      where: { id: eventId },
+      relations: ['organizer', 'sessions', 'rooms'],
+    });
+
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    // Validate organizer
+    if (event.organizer.id !== organizerId || event.organizer.role !== UserRole.ORGANIZER) {
+      throw new ForbiddenException(`User ${organizerId} is not the organizer of event ${eventId}`);
+    }
+
+    // Update sessions with assigned room and startTime
+    const updatedSessions: Session[] = [];
+    for (const assignment of assignments) {
+      const session = event.sessions.find((s) => s.id === assignment.sessionId);
+      if (!session) {
+        this.logger.warn(`Session ${assignment.sessionId} not found in event ${eventId}`);
+        continue;
+      }
+
+      // Find room if assigned
+      let room: Room | null = null;
+      if (assignment.roomId) {
+        room = event.rooms.find((r) => r.id === assignment.roomId) || null;
+        if (!room) {
+          this.logger.warn(`Room ${assignment.roomId} not found in event ${eventId}`);
+        }
+      }
+
+      // Update session
+      session.room = room;
+      session.startTime = assignment.startTime ? new Date(assignment.startTime) : null;
+
+      const updatedSession = await this.sessionRepo.save(session);
+      updatedSessions.push(updatedSession);
+    }
+
+    this.logger.log(`Successfully applied schedule for event ${eventId}`);
+
+    return {
+      assignments,
+      success: true,
+      message: 'Schedule applied successfully',
       sessions: updatedSessions,
     };
   }
