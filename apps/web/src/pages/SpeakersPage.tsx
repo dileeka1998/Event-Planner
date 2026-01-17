@@ -50,8 +50,27 @@ export function SpeakersPage() {
     try {
       const { data } = await getEvents();
       setEvents(data);
+      
+      // Check for stored eventId first (from navigation)
+      const storedEventId = localStorage.getItem('selectedEventId');
+      if (storedEventId) {
+        const eventId = parseInt(storedEventId, 10);
+        if (!isNaN(eventId) && data.some(e => e.id === eventId)) {
+          setSelectedEventId(eventId);
+          localStorage.removeItem('selectedEventId');
+          return; // Don't set default if we found stored eventId
+        }
+      }
+      
+      // Otherwise, select latest event (sorted by startDate descending)
       if (data.length > 0 && !selectedEventId) {
-        setSelectedEventId(data[0].id);
+        // Sort events by startDate descending (latest first)
+        const sortedEvents = [...data].sort((a, b) => {
+          const dateA = new Date(a.startDate).getTime();
+          const dateB = new Date(b.startDate).getTime();
+          return dateB - dateA; // Descending order (latest first)
+        });
+        setSelectedEventId(sortedEvents[0].id);
       }
     } catch (error: any) {
       toast.error('Failed to fetch events');
@@ -279,6 +298,136 @@ export function SpeakersPage() {
     }
   };
 
+  const handleImportCSV = () => {
+    if (!selectedEventId) {
+      toast.error('Please select an event first');
+      return;
+    }
+
+    // Create a hidden file input element
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv';
+    input.onchange = async (e: Event) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const lines = text.split('\n').filter(line => line.trim());
+        
+        if (lines.length < 2) {
+          toast.error('CSV file must have at least a header row and one data row');
+          return;
+        }
+
+        // Helper function to parse CSV line handling quoted values
+        const parseCSVLine = (line: string): string[] => {
+          const result: string[] = [];
+          let current = '';
+          let inQuotes = false;
+          
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            
+            if (char === '"') {
+              if (inQuotes && line[i + 1] === '"') {
+                // Escaped quote
+                current += '"';
+                i++; // Skip next quote
+              } else {
+                // Toggle quote state
+                inQuotes = !inQuotes;
+              }
+            } else if (char === ',' && !inQuotes) {
+              // End of field
+              result.push(current.trim());
+              current = '';
+            } else {
+              current += char;
+            }
+          }
+          
+          // Add last field
+          result.push(current.trim());
+          return result;
+        };
+
+        // Parse CSV header
+        const headers = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
+        const titleIndex = headers.findIndex(h => h.includes('title') || h.includes('session'));
+        const speakerIndex = headers.findIndex(h => h.includes('speaker') || h.includes('name'));
+        const durationIndex = headers.findIndex(h => h.includes('duration') || h.includes('time'));
+        const topicIndex = headers.findIndex(h => h.includes('topic') || h.includes('category'));
+
+        if (titleIndex === -1) {
+          toast.error('CSV must have a "title" or "session" column');
+          return;
+        }
+
+        // Parse data rows
+        const sessionsToCreate = [];
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (let i = 1; i < lines.length; i++) {
+          const values = parseCSVLine(lines[i]);
+          const title = values[titleIndex]?.trim();
+          
+          if (!title) {
+            errorCount++;
+            continue;
+          }
+
+          const speaker = speakerIndex !== -1 ? values[speakerIndex]?.trim() : '';
+          const durationStr = durationIndex !== -1 ? values[durationIndex]?.trim() : '60';
+          const duration = parseInt(durationStr) || 60;
+          const topic = topicIndex !== -1 ? values[topicIndex]?.trim() : 'General';
+
+          sessionsToCreate.push({
+            title,
+            speaker: speaker || undefined,
+            durationMin: duration,
+            topic: topic || 'General',
+            capacity: 0,
+          });
+        }
+
+        if (sessionsToCreate.length === 0) {
+          toast.error('No valid sessions found in CSV file');
+          return;
+        }
+
+        // Create sessions
+        setLoading(true);
+        for (const sessionData of sessionsToCreate) {
+          try {
+            await createSession(selectedEventId, sessionData);
+            successCount++;
+          } catch (error: any) {
+            errorCount++;
+            console.error('Failed to create session:', sessionData, error);
+          }
+        }
+
+        setLoading(false);
+
+        if (successCount > 0) {
+          toast.success(`Successfully imported ${successCount} session(s)`);
+          await fetchSessions(selectedEventId);
+        }
+        if (errorCount > 0) {
+          toast.error(`Failed to import ${errorCount} session(s)`);
+        }
+      } catch (error: any) {
+        setLoading(false);
+        toast.error('Failed to read CSV file: ' + (error?.message || 'Unknown error'));
+        console.error(error);
+      }
+    };
+    input.click();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -287,7 +436,11 @@ export function SpeakersPage() {
           <p className="text-gray-600">Manage speakers and session details</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
+          <Button 
+            variant="outline"
+            onClick={handleImportCSV}
+            disabled={!selectedEventId || loading}
+          >
             <Upload className="w-4 h-4 mr-2" />
             Import Speakers (CSV)
           </Button>

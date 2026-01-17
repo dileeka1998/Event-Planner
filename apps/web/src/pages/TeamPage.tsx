@@ -6,33 +6,33 @@ export function TeamPage() {
   const teamMembers: TeamMember[] = [
     {
       id: '1',
-      name: 'Weranga Dasanayake',
-      index: '123456',
-      role: 'Project Manager',
+      name: 'Dileeka Iranjan Dasanayake',
+      index: 'CL/HDCSE/CMU/123/09',
+      role: 'Tech Lead / Fullstack Software Engineer',
     },
     {
       id: '2',
-      name: 'Dileeka Iranjan',
-      index: '123457',
-      role: 'Software Engineer',
+      name: 'S.A.W.M.Samarathunga',
+      index: 'CL/HDCSE/CMU/123/47',
+      role: 'UI Engineer / Front End Developer',
     },
     {
       id: '3',
-      name: 'Nilakni Gemini Perera',
-      index: '123458',
-      role: 'System Analyst',
+      name: 'B.Nilakni Gemini Perera',
+      index: 'CL/HDCSE/CMU/123/107',
+      role: 'System Analyst / Front End Developer',
     },
     {
       id: '4',
-      name: 'Achini Anuththara',
-      index: '123459',
-      role: 'QA Engineer',
+      name: 'Weranga Dasanayake',
+      index: 'CL/HDCSE/CMU/123/06',
+      role: 'Project Manager / Backend Developer',
     },
     {
       id: '5',
-      name: 'Waruni Samarathunga',
-      index: '123460',
-      role: 'UI Engineer',
+      name: 'Achini Anuttara Bandara',
+      index: 'CL/HDCSE/CMU/123/58',
+      role: 'QA Engineer / Fullstack Software Engineer',
     },
   ];
 
@@ -86,17 +86,17 @@ export function TeamPage() {
           <div className="flex items-center justify-center gap-6 text-sm">
             <div>
               <p className="text-white/80">Project Type</p>
-              <p>Web Dashboard</p>
+              <p>Web App</p>
             </div>
             <div className="w-px h-8 bg-white/30"></div>
             <div>
               <p className="text-white/80">Technologies</p>
-              <p>React + NestJS</p>
+              <p>React + NestJS + Python + FastAPI + spaCy</p>
             </div>
             <div className="w-px h-8 bg-white/30"></div>
             <div>
               <p className="text-white/80">Year</p>
-              <p>2025</p>
+              <p>2026</p>
             </div>
           </div>
         </CardContent>

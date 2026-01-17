@@ -134,6 +134,43 @@ export class AttendeesService {
     });
   }
 
+  async getMyRegistrations(userId: number) {
+    this.logger.log(`Fetching all registrations for user ${userId}`);
+    
+    // Get all user registrations (including CANCELLED for complete history)
+    const allRegistrations = await this.attendeeRepo.find({
+      where: { userId },
+      relations: ['event', 'event.venue', 'user'],
+      order: { joinedAt: 'DESC' },
+    });
+
+    // Format response with event data
+    return allRegistrations.map(reg => ({
+      id: reg.id,
+      eventId: reg.eventId,
+      userId: reg.userId,
+      status: reg.status,
+      joinedAt: reg.joinedAt,
+      event: {
+        id: reg.event.id,
+        title: reg.event.title,
+        startDate: reg.event.startDate,
+        endDate: reg.event.endDate,
+        expectedAudience: reg.event.expectedAudience,
+        venue: reg.event.venue ? {
+          id: reg.event.venue.id,
+          name: reg.event.venue.name,
+          capacity: reg.event.venue.capacity,
+        } : null,
+      },
+      user: reg.user ? {
+        id: reg.user.id,
+        name: reg.user.name,
+        email: reg.user.email,
+      } : null,
+    }));
+  }
+
   async getDashboardData(userId: number) {
     this.logger.log(`Fetching dashboard data for user ${userId}`);
     
@@ -338,7 +375,7 @@ export class AttendeesService {
 
   async getRecommendedSessions(
     userId: number,
-    filters?: { topic?: string; day?: string; track?: string; showAll?: boolean }
+    filters?: { topic?: string; day?: string; track?: string; showAll?: boolean; page?: number; limit?: number }
   ) {
     this.logger.log(`Fetching recommended sessions for user ${userId} with filters: ${JSON.stringify(filters)}`);
 
@@ -439,8 +476,15 @@ export class AttendeesService {
 
     this.logger.log(`Returning ${filteredSessions.length} filtered sessions`);
 
+    // Apply pagination
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 10;
+    const skip = (page - 1) * limit;
+    const total = filteredSessions.length;
+    const paginatedSessions = filteredSessions.slice(skip, skip + limit);
+
     // Format response with registration status
-    return filteredSessions.map((session) => {
+    const sessions = paginatedSessions.map((session) => {
       const eventId = session.event.id;
       const isEventRegistered = registrationMap.has(eventId);
       const eventRegistrationStatus = registrationMap.get(eventId) || null;
@@ -472,6 +516,16 @@ export class AttendeesService {
         } : null,
       };
     });
+
+    return {
+      data: sessions,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   async getMySessions(userId: number) {

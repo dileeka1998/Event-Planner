@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { AttendeeTable } from '../components/attendee/AttendeeTable';
 import { Attendee, Event } from '../types';
 import { toast } from 'sonner';
-import { Users, Loader2 } from 'lucide-react';
+import { Users, Loader2, RotateCw } from 'lucide-react';
 import { KPICard } from '../components/dashboard/KPICard';
 import { getEventAttendees, getEvents } from '../api';
 import { Label } from '@/components/ui/label';
@@ -28,12 +28,29 @@ export function AttendeesPage() {
     }
   }, [selectedEventId]);
 
+  // Refresh attendees when page regains focus
+  useEffect(() => {
+    const handleFocus = () => {
+      if (selectedEventId) {
+        fetchAttendees(selectedEventId);
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [selectedEventId]);
+
   const fetchEvents = async () => {
     try {
       const { data } = await getEvents();
       setEvents(data);
       if (data.length > 0 && !selectedEventId) {
-        setSelectedEventId(data[0].id);
+        // Sort events by startDate descending (latest first) and select the latest
+        const sortedEvents = [...data].sort((a, b) => {
+          const dateA = new Date(a.startDate).getTime();
+          const dateB = new Date(b.startDate).getTime();
+          return dateB - dateA; // Descending order (latest first)
+        });
+        setSelectedEventId(sortedEvents[0].id);
       }
     } catch (error: any) {
       toast.error('Failed to fetch events');
@@ -107,7 +124,7 @@ export function AttendeesPage() {
               <Label htmlFor="event-select">Select Event:</Label>
               <Select 
                 value={selectedEventId?.toString() || ''} 
-                onValueChange={(value) => setSelectedEventId(parseInt(value))}
+                onValueChange={(value: string) => setSelectedEventId(parseInt(value))}
               >
                 <SelectTrigger className="w-64">
                   <SelectValue placeholder="Select an event" />
@@ -161,7 +178,18 @@ export function AttendeesPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Registered Attendees</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Registered Attendees</CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => selectedEventId && fetchAttendees(selectedEventId)}
+                  disabled={loading}
+                >
+                  <RotateCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (

@@ -53,12 +53,21 @@ export class RoomsService {
     return savedRoom;
   }
 
-  async findAll(eventId: number) {
+  async findAll(eventId: number, organizerId?: number) {
     this.logger.log(`Fetching all rooms for event ${eventId}`);
 
-    const event = await this.eventRepo.findOneBy({ id: eventId });
+    const event = await this.eventRepo.findOne({
+      where: { id: eventId },
+      relations: ['organizer'],
+    });
+    
     if (!event) {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    // Verify organizer ownership if organizerId is provided
+    if (organizerId && event.organizer.id !== organizerId) {
+      throw new ForbiddenException(`User ${organizerId} is not the organizer of event ${eventId}`);
     }
 
     return this.roomRepo.find({

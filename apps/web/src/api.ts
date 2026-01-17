@@ -92,8 +92,16 @@ export const registerAttendee = (eventId: number) => api.post(`/events/${eventId
 
 export const leaveEvent = (eventId: number) => api.delete(`/events/${eventId}/attendees/me`);
 
-// Users (for admin panel)
-export const getUsers = () => api.get('/users');
+// Users (for admin dashboard)
+export const getUsers = (params?: { page?: number; limit?: number; search?: string; role?: string }) => {
+  const queryParams = new URLSearchParams();
+  if (params?.page) queryParams.append('page', params.page.toString());
+  if (params?.limit) queryParams.append('limit', params.limit.toString());
+  if (params?.search) queryParams.append('search', params.search);
+  if (params?.role) queryParams.append('role', params.role);
+  const queryString = queryParams.toString();
+  return api.get(`/admin/users${queryString ? `?${queryString}` : ''}`);
+};
 
 // Admin
 export const deleteUser = (id: number) => api.delete(`/admin/users/${id}`);
@@ -104,16 +112,20 @@ export const updateUser = (id: number, data: any) =>
 // Recommendations
 export const getAttendeeDashboard = () => api.get('/attendees/dashboard');
 
-export const getRecommendedSessions = (filters?: { topic?: string; day?: string; track?: string; showAll?: boolean }) => {
+export const getRecommendedSessions = (filters?: { topic?: string; day?: string; track?: string; showAll?: boolean; page?: number; limit?: number }) => {
   const params = new URLSearchParams();
   if (filters?.topic) params.append('topic', filters.topic);
   if (filters?.day) params.append('day', filters.day);
   if (filters?.track) params.append('track', filters.track);
   if (filters?.showAll !== undefined) params.append('showAll', filters.showAll.toString());
+  if (filters?.page) params.append('page', filters.page.toString());
+  if (filters?.limit) params.append('limit', filters.limit.toString());
   return api.get(`/attendees/recommendations?${params.toString()}`);
 };
 
 export const getMySessions = () => api.get('/attendees/my-sessions');
+
+export const getMyRegistrations = () => api.get('/attendees/my-registrations');
 
 export const getAvailableEvents = () => api.get('/attendees/available-events');
 
@@ -152,6 +164,13 @@ export const generateSchedule = (eventId: number, gapMinutes: number = 0, dryRun
 
 export const applySchedule = (eventId: number, assignments: Array<{ sessionId: number; roomId?: number | null; startTime?: string | null }>) =>
   api.post(`/events/${eventId}/schedule/apply`, { assignments });
+
+// User Profile
+export const updateProfile = (data: { name?: string; email?: string }) =>
+  api.patch('/users/me', data);
+
+export const changePassword = (data: { currentPassword: string; newPassword: string }) =>
+  api.patch('/users/me/password', data);
 
 export default api;
 

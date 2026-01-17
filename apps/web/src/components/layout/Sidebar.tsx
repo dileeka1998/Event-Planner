@@ -21,7 +21,8 @@ interface SidebarProps {
 
 export function Sidebar({ currentPage, onNavigate, userRole }: SidebarProps) {
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Admin', 'Organizer', 'Attendee'] },
+    { id: 'admin', label: 'Admin Dashboard', icon: Settings, roles: ['Admin'] },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Organizer', 'Attendee'] },
     { id: 'events', label: 'Events', icon: Calendar, roles: ['Admin', 'Organizer'] },
     { id: 'venues', label: 'Venues', icon: MapPin, roles: ['Admin', 'Organizer'] },
     { id: 'rooms', label: 'Rooms', icon: Building2, roles: ['Organizer'] },
@@ -31,8 +32,7 @@ export function Sidebar({ currentPage, onNavigate, userRole }: SidebarProps) {
     { id: 'attendees', label: 'Attendees', icon: UserCheck, roles: ['Admin', 'Organizer'] },
     { id: 'recommendations', label: 'Recommendations', icon: Lightbulb, roles: ['Attendee'] },
     { id: 'rsvp', label: 'My Events', icon: CheckSquare, roles: ['Attendee'] },
-    { id: 'admin', label: 'Admin Panel', icon: Settings, roles: ['Admin'] },
-    { id: 'team', label: 'Team', icon: Users, roles: ['Admin', 'Organizer', 'Attendee'] },
+    { id: 'team', label: 'Team', icon: Users, roles: ['Organizer', 'Attendee'] },
   ];
 
   const filteredMenuItems = menuItems.filter(item => item.roles.includes(userRole));
@@ -73,7 +73,7 @@ export function Sidebar({ currentPage, onNavigate, userRole }: SidebarProps) {
         })}
       </nav>
 
-      {userRole !== 'Attendee' && (
+      {userRole === 'Organizer' && (
         <div className="p-4 border-t border-gray-200">
           <div className="bg-gradient-to-br from-[#0F6AB4] to-[#28A9A1] rounded-lg p-4 text-white">
             <p className="text-xs opacity-90 mb-1">Pro Tip</p>

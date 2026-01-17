@@ -3,7 +3,7 @@ import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Clock, MapPin, User, Grid3x3, List, Sparkles, Calendar, ArrowRight } from 'lucide-react';
+import { Clock, MapPin, User, Grid3x3, List, Sparkles, Calendar, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Session } from '../types';
 import { getRecommendedSessions } from '../api';
 import { toast } from 'sonner';
@@ -22,6 +22,9 @@ export function RecommendationsPage({ onNavigate }: RecommendationsPageProps = {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [allSessions, setAllSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 0 });
 
   useEffect(() => {
     fetchAllSessions();
@@ -29,12 +32,14 @@ export function RecommendationsPage({ onNavigate }: RecommendationsPageProps = {
 
   useEffect(() => {
     fetchSessions();
-  }, [selectedTopic, selectedDay, selectedTrack]);
+  }, [selectedTopic, selectedDay, selectedTrack, currentPage, pageSize]);
 
   const fetchAllSessions = async () => {
     try {
-      const { data } = await getRecommendedSessions({ showAll: true });
-      const processedSessions: Session[] = data.map((s: any) => ({
+      const { data } = await getRecommendedSessions({ showAll: true, limit: 1000 });
+      // Handle both old format (array) and new format (object with data property)
+      const sessionsData = Array.isArray(data) ? data : (data?.data || []);
+      const processedSessions: Session[] = sessionsData.map((s: any) => ({
         ...s,
         time: s.startTime ? new Date(s.startTime).toLocaleTimeString() : undefined,
         room: s.room?.name || null,
@@ -52,14 +57,22 @@ export function RecommendationsPage({ onNavigate }: RecommendationsPageProps = {
   const fetchSessions = async () => {
     setLoading(true);
     try {
-      const filters: { topic?: string; day?: string; track?: string; showAll?: boolean } = {};
+      const filters: { topic?: string; day?: string; track?: string; showAll?: boolean; page?: number; limit?: number } = {};
       if (selectedTopic !== 'all') filters.topic = selectedTopic;
       if (selectedDay !== 'all') filters.day = selectedDay;
       if (selectedTrack !== 'all') filters.track = selectedTrack;
       filters.showAll = showAll;
+      filters.page = currentPage;
+      filters.limit = pageSize;
 
-      const { data } = await getRecommendedSessions(filters);
-      const processedSessions: Session[] = data.map((s: any) => ({
+      const response = await getRecommendedSessions(filters);
+      // Handle both old format (array) and new format (object with data property)
+      const responseData = response.data;
+      const sessionsData = Array.isArray(responseData) ? responseData : (responseData?.data || []);
+      const paginationData = responseData?.pagination || { total: sessionsData.length, totalPages: 1 };
+      
+      setPagination(paginationData);
+      const processedSessions: Session[] = sessionsData.map((s: any) => ({
         ...s,
         time: s.startTime ? new Date(s.startTime).toLocaleTimeString() : undefined,
         room: s.room?.name || null,
@@ -79,6 +92,7 @@ export function RecommendationsPage({ onNavigate }: RecommendationsPageProps = {
   };
 
   useEffect(() => {
+    setCurrentPage(1); // Reset to first page when filters change
     fetchSessions();
   }, [showAll]);
 
@@ -360,6 +374,58 @@ export function RecommendationsPage({ onNavigate }: RecommendationsPageProps = {
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between pt-4 border-t">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">Per page:</span>
+            <Select
+              value={pageSize.toString()}
+              onValueChange={(value: string) => {
+                setPageSize(parseInt(value));
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className="w-20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="text-sm text-gray-600">
+              Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, pagination.total)} of {pagination.total} sessions
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Previous
+            </Button>
+            <div className="text-sm text-gray-600">
+              Page {currentPage} of {pagination.totalPages}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.min(pagination.totalPages, prev + 1))}
+              disabled={currentPage === pagination.totalPages}
+            >
+              Next
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       )}
     </div>

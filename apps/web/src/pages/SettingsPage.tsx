@@ -1,17 +1,109 @@
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Switch } from '../components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar';
 import { User } from '../types';
+import { updateProfile, changePassword } from '../api';
+import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
 
 interface SettingsPageProps {
   user: User;
+  onUserUpdate?: (updatedUser: User) => void;
 }
 
-export function SettingsPage({ user }: SettingsPageProps) {
+export function SettingsPage({ user, onUserUpdate }: SettingsPageProps) {
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+
+  useEffect(() => {
+    // Initialize state from user prop
+    const nameParts = user.name.split(' ');
+    setFirstName(nameParts[0] || '');
+    setLastName(nameParts.slice(1).join(' ') || '');
+    setEmail(user.email || '');
+  }, [user]);
+
+  const handleSaveProfile = async () => {
+    if (!firstName.trim()) {
+      toast.error('First name is required');
+      return;
+    }
+    if (!email.trim()) {
+      toast.error('Email is required');
+      return;
+    }
+
+    setProfileLoading(true);
+    try {
+      const fullName = lastName.trim() ? `${firstName.trim()} ${lastName.trim()}` : firstName.trim();
+      const { data } = await updateProfile({
+        name: fullName,
+        email: email.trim(),
+      });
+      
+      toast.success('Profile updated successfully');
+      
+      // Update parent component if callback provided
+      if (onUserUpdate) {
+        onUserUpdate({ ...user, name: fullName, email: email.trim() });
+      }
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || 'Failed to update profile';
+      toast.error(errorMessage);
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!currentPassword.trim()) {
+      toast.error('Current password is required');
+      return;
+    }
+    if (!newPassword.trim()) {
+      toast.error('New password is required');
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.error('New password must be at least 6 characters');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      await changePassword({
+        currentPassword: currentPassword.trim(),
+        newPassword: newPassword.trim(),
+      });
+      
+      toast.success('Password changed successfully');
+      
+      // Clear password fields
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || 'Failed to change password';
+      toast.error(errorMessage);
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -23,7 +115,6 @@ export function SettingsPage({ user }: SettingsPageProps) {
         <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="mt-6">
@@ -48,26 +139,50 @@ export function SettingsPage({ user }: SettingsPageProps) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="firstName">First Name</Label>
-                  <Input id="firstName" defaultValue={user.name.split(' ')[0]} />
+                  <Input 
+                    id="firstName" 
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                  />
                 </div>
                 <div>
                   <Label htmlFor="lastName">Last Name</Label>
-                  <Input id="lastName" defaultValue={user.name.split(' ')[1] || ''} />
+                  <Input 
+                    id="lastName" 
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                  />
                 </div>
               </div>
 
               <div>
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" defaultValue={user.email} />
+                <Input 
+                  id="email" 
+                  type="email" 
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
               </div>
 
               <div>
                 <Label htmlFor="role">Role</Label>
-                <Input id="role" defaultValue={user.role} disabled />
+                <Input id="role" value={user.role} disabled />
               </div>
 
-              <Button className="bg-[#0F6AB4] hover:bg-[#0D5A9A]">
-                Save Changes
+              <Button 
+                className="bg-[#0F6AB4] hover:bg-[#0D5A9A]"
+                onClick={handleSaveProfile}
+                disabled={profileLoading}
+              >
+                {profileLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save Changes'
+                )}
               </Button>
             </CardContent>
           </Card>
@@ -81,74 +196,47 @@ export function SettingsPage({ user }: SettingsPageProps) {
             <CardContent className="space-y-4">
               <div>
                 <Label htmlFor="currentPassword">Current Password</Label>
-                <Input id="currentPassword" type="password" />
+                <Input 
+                  id="currentPassword" 
+                  type="password" 
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                />
               </div>
 
               <div>
                 <Label htmlFor="newPassword">New Password</Label>
-                <Input id="newPassword" type="password" />
+                <Input 
+                  id="newPassword" 
+                  type="password" 
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
               </div>
 
               <div>
                 <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                <Input id="confirmPassword" type="password" />
+                <Input 
+                  id="confirmPassword" 
+                  type="password" 
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
               </div>
 
-              <Button className="bg-[#0F6AB4] hover:bg-[#0D5A9A]">
-                Update Password
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="notifications" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm">Email Notifications</p>
-                  <p className="text-xs text-gray-500">Receive email updates about your events</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm">Event Reminders</p>
-                  <p className="text-xs text-gray-500">Get reminded about upcoming sessions</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm">New Session Recommendations</p>
-                  <p className="text-xs text-gray-500">Receive AI-powered session suggestions</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm">Budget Alerts</p>
-                  <p className="text-xs text-gray-500">Get notified when approaching budget limits</p>
-                </div>
-                <Switch />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm">Marketing Communications</p>
-                  <p className="text-xs text-gray-500">Receive news and updates about EventAI</p>
-                </div>
-                <Switch />
-              </div>
-
-              <Button className="bg-[#0F6AB4] hover:bg-[#0D5A9A]">
-                Save Preferences
+              <Button 
+                className="bg-[#0F6AB4] hover:bg-[#0D5A9A]"
+                onClick={handleChangePassword}
+                disabled={passwordLoading}
+              >
+                {passwordLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  'Update Password'
+                )}
               </Button>
             </CardContent>
           </Card>

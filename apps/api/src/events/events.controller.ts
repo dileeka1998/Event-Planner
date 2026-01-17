@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UseGuards, Param, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Param, ParseIntPipe, Request } from '@nestjs/common';
 import { EventsService } from './events.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { AiService } from '../ai/ai.service';
@@ -14,10 +14,14 @@ export class EventsController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all events' })
-  @ApiResponse({ status: 200, description: 'Return all events.' })
-  getAll() {
-    return this.events.findAll();
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all events for the authenticated organizer' })
+  @ApiResponse({ status: 200, description: 'Return all events for the organizer.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  getAll(@Request() req: any) {
+    const organizerId = req.user.userId;
+    return this.events.findAll(organizerId);
   }
 
   @Get(':id')

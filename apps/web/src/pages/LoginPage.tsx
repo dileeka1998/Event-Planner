@@ -47,7 +47,22 @@ export function LoginPage({ onLogin, onForgotPassword }: LoginPageProps) {
       onLogin(data.user, data.token);
       toast.success('Login successful!');
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Login failed. Please check your credentials.');
+      console.error('Login error:', error);
+      // Handle different error response structures
+      let errorMessage = 'Login failed. Please check your credentials.';
+      
+      if (error?.response) {
+        // Axios error with response
+        errorMessage = error.response.data?.message || 
+                      error.response.message || 
+                      error.response.data?.error ||
+                      errorMessage;
+      } else if (error?.message) {
+        // Generic error with message
+        errorMessage = error.message;
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
