@@ -92,7 +92,7 @@ export const registerAttendee = (eventId: number) => api.post(`/events/${eventId
 
 export const leaveEvent = (eventId: number) => api.delete(`/events/${eventId}/attendees/me`);
 
-// Users (for admin panel)
+// Users (for admin dashboard)
 export const getUsers = (params?: { page?: number; limit?: number; search?: string; role?: string }) => {
   const queryParams = new URLSearchParams();
   if (params?.page) queryParams.append('page', params.page.toString());

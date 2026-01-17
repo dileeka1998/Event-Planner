@@ -39,7 +39,7 @@ function decodeJWT(token: string): any {
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentPage, setCurrentPage] = useState('dashboard');
+  const [currentPage, setCurrentPage] = useState('');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [authView, setAuthView] = useState<'login' | 'forgot-password' | 'reset-password'>('login');
@@ -54,13 +54,19 @@ export default function App() {
         // Role should always be in JWT - if missing, default to ATTENDEE (safer default)
         const role = decoded.role || 'ATTENDEE';
         console.log('JWT decoded role:', role, 'Full decoded:', decoded);
-        setCurrentUser({
+        const user = {
           id: decoded.sub,
           email: decoded.email,
           name: decoded.name || decoded.email.split('@')[0],
           role: role,
-        });
+        };
+        setCurrentUser(user);
         setIsAuthenticated(true);
+        // Set default page based on role
+        const defaultPage = role === 'ADMIN' ? 'admin' : 
+                          role === 'ORGANIZER' ? 'dashboard' : 
+                          'dashboard';
+        setCurrentPage(defaultPage);
       } else {
         localStorage.removeItem('app_token');
       }
@@ -83,14 +89,18 @@ export default function App() {
     // Always use the user object from backend response (source of truth)
     setCurrentUser(user);
     setIsAuthenticated(true);
-    setCurrentPage('dashboard');
+    // Set default page based on role
+    const defaultPage = user.role === 'ADMIN' ? 'admin' : 
+                       user.role === 'ORGANIZER' ? 'dashboard' : 
+                       'dashboard';
+    setCurrentPage(defaultPage);
   };
 
   const handleLogout = () => {
     localStorage.removeItem('app_token');
     setCurrentUser(null);
     setIsAuthenticated(false);
-    setCurrentPage('dashboard');
+    setCurrentPage('');
   };
 
   const handleNavigate = (page: string) => {
@@ -160,19 +170,8 @@ export default function App() {
           console.log('Showing Attendee Dashboard');
           return <AttendeeDashboard onNavigate={handleNavigate} />;
         }
-        // For Admin, show a simplified dashboard
-        console.log('Showing Admin Dashboard, role:', userRole);
-        return (
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-gray-900 mb-2">Welcome back, {currentUser.name}!</h1>
-              <p className="text-gray-600">
-                Access the Admin Panel to manage the system
-              </p>
-              <p className="text-xs text-gray-400 mt-2">Your role: {currentUser.role}</p>
-            </div>
-          </div>
-        );
+        // For Admin, redirect to admin dashboard
+        return <AdminPanel />;
       case 'events':
         return <EventsPage onNavigate={handleNavigate} />;
       case 'venues':
@@ -198,23 +197,16 @@ export default function App() {
       case 'settings':
         return <SettingsPage user={currentUser} />;
       default:
-        // Show appropriate dashboard based on user role
+        // Redirect to appropriate default page based on user role
         const defaultRole = (currentUser.role || '').toUpperCase();
+        if (defaultRole === 'ADMIN') {
+          return <AdminPanel />;
+        }
         if (defaultRole === 'ORGANIZER') {
           return <OrganizerDashboard onNavigate={handleNavigate} />;
         }
-        return (
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-gray-900 mb-2">Welcome back, {currentUser.name}!</h1>
-              <p className="text-gray-600">
-                {defaultRole === 'ADMIN' 
-                  ? 'Access the Admin Panel to manage the system' 
-                  : 'Explore recommended sessions and manage your schedule'}
-              </p>
-            </div>
-          </div>
-        );
+        // For Attendee, show dashboard
+        return <AttendeeDashboard onNavigate={handleNavigate} />;
     }
   };
 

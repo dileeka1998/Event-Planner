@@ -21,7 +21,8 @@ interface SidebarProps {
 
 export function Sidebar({ currentPage, onNavigate, userRole }: SidebarProps) {
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Admin', 'Organizer', 'Attendee'] },
+    { id: 'admin', label: 'Admin Dashboard', icon: Settings, roles: ['Admin'] },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['Organizer', 'Attendee'] },
     { id: 'events', label: 'Events', icon: Calendar, roles: ['Admin', 'Organizer'] },
     { id: 'venues', label: 'Venues', icon: MapPin, roles: ['Admin', 'Organizer'] },
     { id: 'rooms', label: 'Rooms', icon: Building2, roles: ['Organizer'] },
@@ -31,7 +32,6 @@ export function Sidebar({ currentPage, onNavigate, userRole }: SidebarProps) {
     { id: 'attendees', label: 'Attendees', icon: UserCheck, roles: ['Admin', 'Organizer'] },
     { id: 'recommendations', label: 'Recommendations', icon: Lightbulb, roles: ['Attendee'] },
     { id: 'rsvp', label: 'My Events', icon: CheckSquare, roles: ['Attendee'] },
-    { id: 'admin', label: 'Admin Panel', icon: Settings, roles: ['Admin'] },
     { id: 'team', label: 'Team', icon: Users, roles: ['Admin', 'Organizer', 'Attendee'] },
   ];
 

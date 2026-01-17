@@ -274,7 +274,7 @@ export function AdminPanel() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-gray-900 mb-2">Admin Panel</h1>
+        <h1 className="text-gray-900 mb-2">Admin Dashboard</h1>
         <p className="text-gray-600">System management and oversight</p>
       </div>
 
