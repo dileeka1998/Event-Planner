@@ -284,6 +284,7 @@ export class EventsService {
     }
     
     // Create budget item
+    const status: BudgetItemStatus = dto.status ? (dto.status as BudgetItemStatus) : BudgetItemStatus.PLANNED;
     const budgetItem = this.budgetItemRepo.create({
       eventBudget: eventBudget,
       category: dto.category,
@@ -293,7 +294,7 @@ export class EventsService {
       quantity: dto.quantity || 1,
       unit: dto.unit,
       vendor: dto.vendor,
-      status: dto.status || BudgetItemStatus.PLANNED,
+      status: status,
     });
     
     const savedItem = await this.budgetItemRepo.save(budgetItem);
