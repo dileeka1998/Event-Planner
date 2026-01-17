@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Label } from '../components/ui/label';
 import { Download, Calendar, Clock, MapPin, Loader2, Users, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react';
 import { EventAttendee, Event, Session } from '../types';
-import { getEvents, getEventAttendees, leaveEvent, registerAttendee, getAvailableEvents, getMySessions, getEventSessions } from '../api';
+import { getEvents, getEventAttendees, leaveEvent, registerAttendee, getAvailableEvents, getMySessions, getEventSessions, getMyRegistrations } from '../api';
 import { toast } from 'sonner';
 
 interface RSVPPageProps {
@@ -66,31 +66,19 @@ export function RSVPPage({ userRole }: RSVPPageProps) {
   const fetchMyRegistrations = async () => {
     setLoading(true);
     try {
-      const userId = getUserId();
-      if (!userId) {
-        toast.error('Please login to view your registrations');
-        return;
-      }
-
-      const { data: eventsData } = await getEvents();
-      const registrations: EventAttendee[] = [];
-      
-      for (const event of eventsData) {
-        try {
-          const { data: attendeesData } = await getEventAttendees(event.id);
-          const myRegistration = attendeesData.find((a: any) => a.userId === userId);
-          if (myRegistration) {
-            registrations.push({
-              ...myRegistration,
-              event: event,
-            });
-          }
-        } catch {
-          // Event might not have attendees endpoint accessible
-        }
-      }
-      
+      const { data } = await getMyRegistrations();
+      // Map the response to match EventAttendee interface
+      const registrations: EventAttendee[] = data.map((reg: any) => ({
+        id: reg.id,
+        eventId: reg.eventId,
+        userId: reg.userId,
+        status: reg.status,
+        joinedAt: reg.joinedAt,
+        event: reg.event,
+        user: reg.user,
+      }));
       setMyRegistrations(registrations);
+      console.log('Fetched registrations:', registrations);
     } catch (error: any) {
       toast.error('Failed to fetch your registrations');
       console.error(error);
@@ -202,7 +190,9 @@ export function RSVPPage({ userRole }: RSVPPageProps) {
     try {
       await leaveEvent(eventId);
       toast.success('Successfully left the event');
+      // Refresh both registrations and available events
       await fetchMyRegistrations();
+      await fetchAvailableEvents();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Failed to leave event');
     }
@@ -227,6 +217,50 @@ export function RSVPPage({ userRole }: RSVPPageProps) {
   };
 
   if (userRole === 'Attendee') {
+    // Filter upcoming events: registered events (CONFIRMED or WAITLISTED) that haven't started
+    const upcoming = myRegistrations.filter((r) => {
+      // Check status first
+      if (r.status !== 'CONFIRMED' && r.status !== 'WAITLISTED') {
+        return false;
+      }
+      
+      // Check if event has startDate
+      if (!r.event?.startDate) {
+        console.log('Event missing startDate:', r.event);
+        return false;
+      }
+      
+      // Compare dates (normalize both to midnight for accurate comparison)
+      try {
+        const eventStart = new Date(r.event.startDate);
+        if (isNaN(eventStart.getTime())) {
+          console.log('Invalid event startDate:', r.event.startDate);
+          return false;
+        }
+        eventStart.setHours(0, 0, 0, 0);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        // Only show events that haven't started yet (including today)
+        const isUpcoming = eventStart >= today;
+        if (!isUpcoming) {
+          console.log('Event is in the past:', r.event.title, 'startDate:', r.event.startDate, 'today:', today);
+        }
+        return isUpcoming;
+      } catch (error) {
+        console.error('Error parsing event date:', error, r.event);
+        return false;
+      }
+    });
+    
+    // Debug logging
+    console.log('My Registrations:', myRegistrations.length);
+    console.log('Upcoming Events:', upcoming.length);
+    console.log('Upcoming events details:', upcoming.map(r => ({
+      title: r.event?.title,
+      startDate: r.event?.startDate,
+      status: r.status
+    })));
     const confirmed = myRegistrations.filter(r => r.status === 'CONFIRMED');
     const waitlisted = myRegistrations.filter(r => r.status === 'WAITLISTED');
 
@@ -324,13 +358,18 @@ export function RSVPPage({ userRole }: RSVPPageProps) {
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
               </div>
-            ) : confirmed.length === 0 ? (
+            ) : upcoming.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
                 <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
                 <p>No upcoming events registered</p>
+                {myRegistrations.length > 0 && (
+                  <p className="text-sm mt-2">
+                    You have {myRegistrations.length} registration(s), but none are upcoming events.
+                  </p>
+                )}
               </div>
             ) : (
-              confirmed.map((registration) => {
+              upcoming.map((registration) => {
                 const event = registration.event;
                 const isExpanded = expandedEvents.has(event?.id || 0);
                 const sessions = eventSessions.get(event?.id || 0) || [];

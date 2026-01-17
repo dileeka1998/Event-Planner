@@ -123,6 +123,8 @@ export const getRecommendedSessions = (filters?: { topic?: string; day?: string;
 
 export const getMySessions = () => api.get('/attendees/my-sessions');
 
+export const getMyRegistrations = () => api.get('/attendees/my-registrations');
+
 export const getAvailableEvents = () => api.get('/attendees/available-events');
 
 // Sessions

@@ -47,6 +47,17 @@ export class AttendeesController {
 export class AttendeesRecommendationsController {
   constructor(private readonly attendeesService: AttendeesService) {}
 
+  @Get('my-registrations')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all event registrations for authenticated attendee' })
+  @ApiResponse({ status: 200, description: 'Return all registrations with event data.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  getMyRegistrations(@Request() req: any) {
+    const userId = req.user.userId;
+    return this.attendeesService.getMyRegistrations(userId);
+  }
+
   @Get('dashboard')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

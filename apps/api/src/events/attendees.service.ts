@@ -134,6 +134,43 @@ export class AttendeesService {
     });
   }
 
+  async getMyRegistrations(userId: number) {
+    this.logger.log(`Fetching all registrations for user ${userId}`);
+    
+    // Get all user registrations (including CANCELLED for complete history)
+    const allRegistrations = await this.attendeeRepo.find({
+      where: { userId },
+      relations: ['event', 'event.venue', 'user'],
+      order: { joinedAt: 'DESC' },
+    });
+
+    // Format response with event data
+    return allRegistrations.map(reg => ({
+      id: reg.id,
+      eventId: reg.eventId,
+      userId: reg.userId,
+      status: reg.status,
+      joinedAt: reg.joinedAt,
+      event: {
+        id: reg.event.id,
+        title: reg.event.title,
+        startDate: reg.event.startDate,
+        endDate: reg.event.endDate,
+        expectedAudience: reg.event.expectedAudience,
+        venue: reg.event.venue ? {
+          id: reg.event.venue.id,
+          name: reg.event.venue.name,
+          capacity: reg.event.venue.capacity,
+        } : null,
+      },
+      user: reg.user ? {
+        id: reg.user.id,
+        name: reg.user.name,
+        email: reg.user.email,
+      } : null,
+    }));
+  }
+
   async getDashboardData(userId: number) {
     this.logger.log(`Fetching dashboard data for user ${userId}`);
     
