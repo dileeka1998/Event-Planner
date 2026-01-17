@@ -6,6 +6,7 @@ import { UpdateBudgetItemDto } from './dto/update-budget-item.dto';
 import { AiService } from '../ai/ai.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { UserRole } from '../users/user.entity';
 
 @ApiTags('events')
 @Controller('events')
@@ -18,10 +19,15 @@ export class EventsController {
   @Get()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get all events for the authenticated organizer' })
-  @ApiResponse({ status: 200, description: 'Return all events for the organizer.' })
+  @ApiOperation({ summary: 'Get all events - returns all events for admins, organizer events for organizers' })
+  @ApiResponse({ status: 200, description: 'Return all events (admin) or events for the organizer.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   getAll(@Request() req: any) {
+    // If user is admin, return all events (no organizer filter)
+    if (req.user.role === UserRole.ADMIN) {
+      return this.events.findAll(); // No organizerId = all events
+    }
+    // Otherwise, return only events for this organizer
     const organizerId = req.user.userId;
     return this.events.findAll(organizerId);
   }
