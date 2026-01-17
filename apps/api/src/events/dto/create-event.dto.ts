@@ -1,7 +1,36 @@
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsDateString, IsNumber, IsOptional, IsNotEmpty, IsArray, ValidateNested } from 'class-validator';
+import { IsString, IsDateString, IsNumber, IsOptional, IsNotEmpty, IsArray, ValidateNested, Validate, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
 import { Type } from 'class-transformer';
+
+@ValidatorConstraint({ name: 'isDateRangeValid', async: false })
+export class IsDateRangeValidConstraint implements ValidatorConstraintInterface {
+  validate(endDate: string, args: ValidationArguments) {
+    const startDate = (args.object as CreateEventDto).startDate;
+    if (!startDate || !endDate) return true; // Let other validators handle required checks
+    return new Date(startDate) <= new Date(endDate);
+  }
+
+  defaultMessage(args: ValidationArguments) {
+    return 'End date must be greater than or equal to start date';
+  }
+}
+
+@ValidatorConstraint({ name: 'isStartDateNotPast', async: false })
+export class IsStartDateNotPastConstraint implements ValidatorConstraintInterface {
+  validate(startDate: string) {
+    if (!startDate) return true; // Let other validators handle required checks
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const eventStartDate = new Date(startDate);
+    eventStartDate.setHours(0, 0, 0, 0);
+    return eventStartDate >= today;
+  }
+
+  defaultMessage() {
+    return 'Start date cannot be in the past';
+  }
+}
 
 export class BudgetItemDto {
   @ApiProperty({ description: 'Category of the budget item' })
@@ -51,10 +80,12 @@ export class CreateEventDto {
 
   @ApiProperty({ description: 'The start date of the event', type: 'string', format: 'date' })
   @IsDateString()
+  @Validate(IsStartDateNotPastConstraint)
   startDate!: string;
 
   @ApiProperty({ description: 'The end date of the event', type: 'string', format: 'date' })
   @IsDateString()
+  @Validate(IsDateRangeValidConstraint)
   endDate!: string;
 
   @ApiPropertyOptional({ description: 'The expected number of attendees' })
