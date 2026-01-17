@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import { EventAttendee, AttendeeStatus } from './event-attendee.entity';
 import { Event } from './event.entity';
 import { Session } from './session.entity';
@@ -16,7 +16,7 @@ export class AttendeesService {
     @InjectRepository(Session) private sessionRepo: Repository<Session>,
     @InjectRepository(User) private userRepo: Repository<User>,
     private dataSource: DataSource,
-  ) {}
+  ) { }
 
   async register(eventId: number, userId: number) {
     this.logger.log(`Registering user ${userId} for event ${eventId}`);
@@ -55,12 +55,14 @@ export class AttendeesService {
         throw new ConflictException('User is already registered for this event');
       }
 
-      // Check capacity
-      const confirmedCount = await this.attendeeRepo.count({
+      // Check capacity - use transaction-scoped query for accurate count
+      const confirmedCount = await queryRunner.manager.count(EventAttendee, {
         where: { eventId, status: AttendeeStatus.CONFIRMED },
       });
       const capacity = event.venue?.capacity || event.expectedAudience || 0;
       const status = confirmedCount < capacity ? AttendeeStatus.CONFIRMED : AttendeeStatus.WAITLISTED;
+
+      this.logger.log(`Event ${eventId} capacity: ${capacity}, confirmed: ${confirmedCount}, assigning status: ${status}`);
 
       const attendee = this.attendeeRepo.create({
         eventId,
@@ -127,8 +129,12 @@ export class AttendeesService {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
 
+    // Exclude CANCELLED attendees from the list by default
     return this.attendeeRepo.find({
-      where: { eventId },
+      where: {
+        eventId,
+        status: In([AttendeeStatus.CONFIRMED, AttendeeStatus.WAITLISTED]),
+      },
       relations: ['user'],
       order: { joinedAt: 'ASC' },
     });
@@ -136,7 +142,7 @@ export class AttendeesService {
 
   async getMyRegistrations(userId: number) {
     this.logger.log(`Fetching all registrations for user ${userId}`);
-    
+
     // Get all user registrations (including CANCELLED for complete history)
     const allRegistrations = await this.attendeeRepo.find({
       where: { userId },
@@ -173,7 +179,7 @@ export class AttendeesService {
 
   async getDashboardData(userId: number) {
     this.logger.log(`Fetching dashboard data for user ${userId}`);
-    
+
     // Get all user registrations (excluding CANCELLED)
     const allRegistrations = await this.attendeeRepo.find({
       where: [
