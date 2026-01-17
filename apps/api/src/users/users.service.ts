@@ -49,4 +49,45 @@ export class UsersService {
     this.logger.log(`Finding user by reset token`);
     return this.repo.findOneBy({ resetToken: token });
   }
+
+  async updateProfile(userId: number, updates: { name?: string; email?: string }) {
+    this.logger.log(`Updating profile for user ID: ${userId}`);
+    const user = await this.repo.findOneBy({ id: userId });
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    if (updates.name !== undefined) {
+      user.name = updates.name;
+    }
+    if (updates.email !== undefined) {
+      user.email = updates.email;
+    }
+
+    const updatedUser = await this.repo.save(user);
+    this.logger.log(`Profile updated for user ID: ${userId}`);
+    return updatedUser;
+  }
+
+  async changePassword(userId: number, currentPassword: string, newPassword: string) {
+    this.logger.log(`Changing password for user ID: ${userId}`);
+    const user = await this.repo.findOneBy({ id: userId });
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Verify current password
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isCurrentPasswordValid) {
+      throw new Error('Current password is incorrect');
+    }
+
+    // Hash and update new password
+    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+    user.passwordHash = newPasswordHash;
+
+    const updatedUser = await this.repo.save(user);
+    this.logger.log(`Password changed for user ID: ${userId}`);
+    return updatedUser;
+  }
 }

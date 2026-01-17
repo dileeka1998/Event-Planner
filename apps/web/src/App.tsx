@@ -19,6 +19,7 @@ import { AttendeesPage } from './pages/AttendeesPage';
 import { TeamPage } from './pages/TeamPage';
 import { User } from './types';
 import { toast } from 'sonner';
+import { Toaster } from './components/ui/sonner';
 
 // Simple JWT decode (without verification - just for getting user info)
 function decodeJWT(token: string): any {
@@ -107,6 +108,12 @@ export default function App() {
     setCurrentPage(page);
   };
 
+  const handleUserUpdate = (updatedUser: User) => {
+    setCurrentUser(updatedUser);
+    // Update JWT token if needed - for now just update local state
+    // The token will be refreshed on next login
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -118,38 +125,49 @@ export default function App() {
   if (!isAuthenticated || !currentUser) {
     if (authView === 'forgot-password') {
       return (
-        <ForgotPasswordPage
-          onBack={() => setAuthView('login')}
-          onResetRequested={(token) => {
-            setResetToken(token);
-            setAuthView('reset-password');
-            // Update URL with token
-            window.history.pushState({}, '', `?token=${token}`);
-          }}
-        />
+        <>
+          <ForgotPasswordPage
+            onBack={() => setAuthView('login')}
+            onResetRequested={(token) => {
+              setResetToken(token);
+              setAuthView('reset-password');
+              // Update URL with token
+              window.history.pushState({}, '', `?token=${token}`);
+            }}
+          />
+          <Toaster />
+        </>
       );
     }
 
     if (authView === 'reset-password') {
       return (
-        <ResetPasswordPage
-          token={resetToken}
-          onBack={() => {
-            setAuthView('login');
-            setResetToken('');
-            window.history.pushState({}, '', '/');
-          }}
-          onPasswordReset={() => {
-            setAuthView('login');
-            setResetToken('');
-            window.history.pushState({}, '', '/');
-            toast.success('Password reset successful! Please login with your new password.');
-          }}
-        />
+        <>
+          <ResetPasswordPage
+            token={resetToken}
+            onBack={() => {
+              setAuthView('login');
+              setResetToken('');
+              window.history.pushState({}, '', '/');
+            }}
+            onPasswordReset={() => {
+              setAuthView('login');
+              setResetToken('');
+              window.history.pushState({}, '', '/');
+              toast.success('Password reset successful! Please login with your new password.');
+            }}
+          />
+          <Toaster />
+        </>
       );
     }
 
-    return <LoginPage onLogin={handleLogin} onForgotPassword={() => setAuthView('forgot-password')} />;
+    return (
+      <>
+        <LoginPage onLogin={handleLogin} onForgotPassword={() => setAuthView('forgot-password')} />
+        <Toaster />
+      </>
+    );
   }
 
   const renderPage = () => {
@@ -195,7 +213,7 @@ export default function App() {
       case 'team':
         return <TeamPage />;
       case 'settings':
-        return <SettingsPage user={currentUser} />;
+        return <SettingsPage user={currentUser} onUserUpdate={handleUserUpdate} />;
       default:
         // Redirect to appropriate default page based on user role
         const defaultRole = (currentUser.role || '').toUpperCase();

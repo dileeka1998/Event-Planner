@@ -155,6 +155,190 @@ export function AdminPanel() {
     }
   };
 
+  const exportToCSV = (data: any[], headers: string[], filename: string) => {
+    try {
+      // Create CSV content with proper escaping
+      const csvRows = [
+        headers.map((h: string) => `"${h}"`).join(','),
+        ...data.map((row: any[]) => 
+          row.map((cell: any) => {
+            const cellValue = cell !== null && cell !== undefined ? String(cell) : '';
+            // Escape quotes and wrap in quotes
+            return `"${cellValue.replace(/"/g, '""')}"`;
+          }).join(',')
+        ),
+      ];
+      
+      const csvContent = csvRows.join('\n');
+      
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      return true;
+    } catch (error) {
+      console.error('Export error:', error);
+      return false;
+    }
+  };
+
+  const handleExportUsers = async () => {
+    try {
+      // Fetch all users without pagination for export
+      const response = await getUsers({
+        page: 1,
+        limit: 10000, // Large limit to get all users
+        search: searchTerm || undefined,
+        role: roleFilter && roleFilter !== "all" ? roleFilter : undefined,
+      });
+
+      const allUsers = response.data?.data || users;
+      
+      // Prepare CSV data
+      const headers = ['Name', 'Email', 'Role', 'Created At'];
+      const csvData = allUsers.map((user: User) => [
+        user.name || '',
+        user.email || '',
+        getRoleDisplay(user.role),
+        user.createdAt ? new Date(user.createdAt).toLocaleString() : '',
+      ]);
+
+      const filename = `users-export-${new Date().toISOString().split('T')[0]}.csv`;
+      
+      if (exportToCSV(csvData, headers, filename)) {
+        toast.success(`Exported ${allUsers.length} user(s) successfully`);
+      } else {
+        toast.error('Failed to export users');
+      }
+    } catch (error: any) {
+      toast.error('Failed to export users: ' + (error?.response?.data?.message || 'Unknown error'));
+      console.error(error);
+    }
+  };
+
+  const handleExportVenues = () => {
+    try {
+      if (venues.length === 0) {
+        toast.error('No venues to export');
+        return;
+      }
+
+      // Prepare CSV data for venues
+      const headers = ['Name', 'Address', 'Capacity', 'Hourly Rate', 'Contact Name', 'Contact Phone'];
+      const csvData = venues.map((venue: Venue) => [
+        venue.name || '',
+        venue.address || '',
+        venue.capacity || 0,
+        venue.hourlyRate || 'N/A',
+        venue.contactName || '',
+        venue.contactPhone || '',
+      ]);
+
+      const filename = `venues-export-${new Date().toISOString().split('T')[0]}.csv`;
+      
+      if (exportToCSV(csvData, headers, filename)) {
+        toast.success(`Exported ${venues.length} venue(s) successfully`);
+      } else {
+        toast.error('Failed to export venues');
+      }
+    } catch (error: any) {
+      toast.error('Failed to export venues: ' + (error?.message || 'Unknown error'));
+      console.error(error);
+    }
+  };
+
+  const handleExportReport = () => {
+    try {
+      // Create comprehensive CSV report with all data
+      const reportData: any[] = [];
+      
+      // Add Users section
+      const usersByRole = users.reduce((acc: Record<string, number>, user: User) => {
+        const role = getRoleDisplay(user.role);
+        acc[role] = (acc[role] || 0) + 1;
+        return acc;
+      }, {});
+      
+      reportData.push(['ADMIN DASHBOARD REPORT']);
+      reportData.push(['Generated', new Date().toLocaleString()]);
+      reportData.push([]);
+      reportData.push(['USERS SUMMARY']);
+      reportData.push(['Total Users', pagination.total]);
+      Object.entries(usersByRole).forEach(([role, count]) => {
+        reportData.push([`${role} Users`, count]);
+      });
+      reportData.push([]);
+      
+      // Add Venues section
+      reportData.push(['VENUES SUMMARY']);
+      reportData.push(['Total Venues', venues.length]);
+      if (venues.length > 0) {
+        reportData.push([]);
+        reportData.push(['Venue Name', 'Address', 'Capacity', 'Hourly Rate']);
+        venues.forEach((venue: Venue) => {
+          reportData.push([
+          venue.name || '',
+          venue.address || '',
+          venue.capacity || 0,
+          venue.hourlyRate || 'N/A',
+        ]);
+        });
+      }
+      reportData.push([]);
+      
+      // Add Events section
+      reportData.push(['EVENTS SUMMARY']);
+      reportData.push(['Total Events', events.length]);
+      if (events.length > 0) {
+        reportData.push([]);
+        reportData.push(['Title', 'Start Date', 'End Date', 'Expected Audience', 'Budget']);
+        events.forEach((event: Event) => {
+          reportData.push([
+            event.title || '',
+            event.startDate ? new Date(event.startDate).toLocaleDateString() : '',
+            event.endDate ? new Date(event.endDate).toLocaleDateString() : '',
+            event.expectedAudience || 0,
+            event.budget || 'N/A',
+          ]);
+        });
+      }
+      
+      const filename = `admin-report-${new Date().toISOString().split('T')[0]}.csv`;
+      
+      // For report, we'll use a simpler approach since it has mixed row lengths
+      const csvRows = reportData.map((row: any[]) => {
+        if (row.length === 0) return '';
+        return row.map((cell: any) => {
+          const cellValue = cell !== null && cell !== undefined ? String(cell) : '';
+          return `"${cellValue.replace(/"/g, '""')}"`;
+        }).join(',');
+      });
+      
+      const csvContent = csvRows.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Report exported successfully');
+    } catch (error: any) {
+      toast.error('Failed to export report: ' + (error?.message || 'Unknown error'));
+      console.error(error);
+    }
+  };
+
   const handleDeleteClick = (user: User) => {
     // Only allow deleting organizers and attendees, not admins
     if (user.role === 'ADMIN') {
@@ -329,7 +513,7 @@ export function AdminPanel() {
       <div className="flex items-center justify-between">
         <CardTitle>User Management</CardTitle>
         <div className="flex gap-2">
-          <Button variant="outline">
+          <Button variant="outline" onClick={handleExportUsers}>
             <Download className="w-4 h-4 mr-2" />
             Export Users
           </Button>
@@ -565,9 +749,9 @@ export function AdminPanel() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>Venues Overview</CardTitle>
-                  <Button variant="outline">
+                  <Button variant="outline" onClick={handleExportVenues}>
                     <Download className="w-4 h-4 mr-2" />
-                    Export Report
+                    Export Venues
                   </Button>
                 </div>
               </CardHeader>

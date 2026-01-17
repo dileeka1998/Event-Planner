@@ -41,7 +41,6 @@ export function DashboardLayout({
           user={user} 
           onNavigate={onNavigate} 
           onLogout={onLogout}
-          notificationCount={3}
         />
         <main className="flex-1 p-6 overflow-auto">
           {children}

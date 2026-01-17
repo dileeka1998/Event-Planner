@@ -165,5 +165,12 @@ export const generateSchedule = (eventId: number, gapMinutes: number = 0, dryRun
 export const applySchedule = (eventId: number, assignments: Array<{ sessionId: number; roomId?: number | null; startTime?: string | null }>) =>
   api.post(`/events/${eventId}/schedule/apply`, { assignments });
 
+// User Profile
+export const updateProfile = (data: { name?: string; email?: string }) =>
+  api.patch('/users/me', data);
+
+export const changePassword = (data: { currentPassword: string; newPassword: string }) =>
+  api.patch('/users/me/password', data);
+
 export default api;
 

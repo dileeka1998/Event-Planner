@@ -1,6 +1,5 @@
-import { Search, Bell, Settings, LogOut } from 'lucide-react';
+import { Search, Settings, LogOut } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
-import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import {
   DropdownMenu,
@@ -16,10 +15,9 @@ interface TopNavbarProps {
   user: User;
   onNavigate: (page: string) => void;
   onLogout: () => void;
-  notificationCount?: number;
 }
 
-export function TopNavbar({ user, onNavigate, onLogout, notificationCount = 0 }: TopNavbarProps) {
+export function TopNavbar({ user, onNavigate, onLogout }: TopNavbarProps) {
   return (
     <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
       <div className="flex-1 max-w-xl">
@@ -34,15 +32,6 @@ export function TopNavbar({ user, onNavigate, onLogout, notificationCount = 0 }:
       </div>
 
       <div className="flex items-center gap-4">
-        <button className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors">
-          <Bell className="w-5 h-5 text-gray-600" />
-          {notificationCount > 0 && (
-            <Badge className="absolute -top-1 -right-1 bg-[#F9B233] text-white text-xs px-1.5 py-0">
-              {notificationCount}
-            </Badge>
-          )}
-        </button>
-
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-3 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors">
