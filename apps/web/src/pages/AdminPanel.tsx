@@ -88,9 +88,9 @@ export function AdminPanel() {
         search: searchTerm || undefined,
         role: roleFilter && roleFilter !== "all" ? roleFilter : undefined,
       });
-      
+
       console.log('Users API response:', response);
-      
+
       if (response.data) {
         setUsers(response.data.data || []);
         setPagination(response.data.pagination || { total: 0, totalPages: 0 });
@@ -126,7 +126,7 @@ export function AdminPanel() {
         location: v.address?.split(',')?.pop()?.trim() || '',
       })));
       setEvents(eventsRes.data || []);
-      
+
       // Fetch users with pagination (skip loading since fetchAllData already set it)
       await fetchUsers(true);
     } catch (error: any) {
@@ -160,7 +160,7 @@ export function AdminPanel() {
       // Create CSV content with proper escaping
       const csvRows = [
         headers.map((h: string) => `"${h}"`).join(','),
-        ...data.map((row: any[]) => 
+        ...data.map((row: any[]) =>
           row.map((cell: any) => {
             const cellValue = cell !== null && cell !== undefined ? String(cell) : '';
             // Escape quotes and wrap in quotes
@@ -168,9 +168,9 @@ export function AdminPanel() {
           }).join(',')
         ),
       ];
-      
+
       const csvContent = csvRows.join('\n');
-      
+
       // Create and download file
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = window.URL.createObjectURL(blob);
@@ -181,7 +181,7 @@ export function AdminPanel() {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-      
+
       return true;
     } catch (error) {
       console.error('Export error:', error);
@@ -200,7 +200,7 @@ export function AdminPanel() {
       });
 
       const allUsers = response.data?.data || users;
-      
+
       // Prepare CSV data
       const headers = ['Name', 'Email', 'Role', 'Created At'];
       const csvData = allUsers.map((user: User) => [
@@ -211,7 +211,7 @@ export function AdminPanel() {
       ]);
 
       const filename = `users-export-${new Date().toISOString().split('T')[0]}.csv`;
-      
+
       if (exportToCSV(csvData, headers, filename)) {
         toast.success(`Exported ${allUsers.length} user(s) successfully`);
       } else {
@@ -242,7 +242,7 @@ export function AdminPanel() {
       ]);
 
       const filename = `venues-export-${new Date().toISOString().split('T')[0]}.csv`;
-      
+
       if (exportToCSV(csvData, headers, filename)) {
         toast.success(`Exported ${venues.length} venue(s) successfully`);
       } else {
@@ -258,14 +258,14 @@ export function AdminPanel() {
     try {
       // Create comprehensive CSV report with all data
       const reportData: any[] = [];
-      
+
       // Add Users section
       const usersByRole = users.reduce((acc: Record<string, number>, user: User) => {
         const role = getRoleDisplay(user.role);
         acc[role] = (acc[role] || 0) + 1;
         return acc;
       }, {});
-      
+
       reportData.push(['ADMIN DASHBOARD REPORT']);
       reportData.push(['Generated', new Date().toLocaleString()]);
       reportData.push([]);
@@ -275,7 +275,7 @@ export function AdminPanel() {
         reportData.push([`${role} Users`, count]);
       });
       reportData.push([]);
-      
+
       // Add Venues section
       reportData.push(['VENUES SUMMARY']);
       reportData.push(['Total Venues', venues.length]);
@@ -284,15 +284,15 @@ export function AdminPanel() {
         reportData.push(['Venue Name', 'Address', 'Capacity', 'Hourly Rate']);
         venues.forEach((venue: Venue) => {
           reportData.push([
-          venue.name || '',
-          venue.address || '',
-          venue.capacity || 0,
-          venue.hourlyRate || 'N/A',
-        ]);
+            venue.name || '',
+            venue.address || '',
+            venue.capacity || 0,
+            venue.hourlyRate || 'N/A',
+          ]);
         });
       }
       reportData.push([]);
-      
+
       // Add Events section
       reportData.push(['EVENTS SUMMARY']);
       reportData.push(['Total Events', events.length]);
@@ -309,9 +309,9 @@ export function AdminPanel() {
           ]);
         });
       }
-      
+
       const filename = `admin-report-${new Date().toISOString().split('T')[0]}.csv`;
-      
+
       // For report, we'll use a simpler approach since it has mixed row lengths
       const csvRows = reportData.map((row: any[]) => {
         if (row.length === 0) return '';
@@ -320,7 +320,7 @@ export function AdminPanel() {
           return `"${cellValue.replace(/"/g, '""')}"`;
         }).join(',');
       });
-      
+
       const csvContent = csvRows.join('\n');
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = window.URL.createObjectURL(blob);
@@ -331,7 +331,7 @@ export function AdminPanel() {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-      
+
       toast.success('Report exported successfully');
     } catch (error: any) {
       toast.error('Failed to export report: ' + (error?.message || 'Unknown error'));
@@ -502,299 +502,244 @@ export function AdminPanel() {
         <Tabs defaultValue="users">
           <TabsList>
             <TabsTrigger value="users">Users</TabsTrigger>
-            <TabsTrigger value="venues">Venues</TabsTrigger>
             <TabsTrigger value="financial">Financial Reports</TabsTrigger>
             <TabsTrigger value="system">System Metrics</TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="mt-6">
-  <Card>
-    <CardHeader>
-      <div className="flex items-center justify-between">
-        <CardTitle>User Management</CardTitle>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExportUsers}>
-            <Download className="w-4 h-4 mr-2" />
-            Export Users
-          </Button>
-        </div>
-      </div>
-    </CardHeader>
-    <CardContent>
-      {/* Search, Role Filter, and Page Size Controls */}
-      <div className="flex items-center gap-4 mb-4">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <Input
-            placeholder="Search by name or email..."
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1); // Reset to first page on search
-            }}
-            className="pl-10"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <Label htmlFor="roleFilter" className="text-sm text-gray-600">Role:</Label>
-          <Select
-            value={roleFilter}
-            onValueChange={(value: string) => {
-              setRoleFilter(value);
-              setCurrentPage(1);
-            }}
-          >
-            <SelectTrigger className="w-32">
-              <SelectValue placeholder="All roles" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All roles</SelectItem>
-              <SelectItem value="ORGANIZER">Organizer</SelectItem>
-              <SelectItem value="ATTENDEE">Attendee</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2">
-          <Label htmlFor="pageSize" className="text-sm text-gray-600">Per page:</Label>
-          <Select
-            value={pageSize.toString()}
-            onValueChange={(value: string) => {
-              setPageSize(parseInt(value));
-              setCurrentPage(1);
-            }}
-          >
-            <SelectTrigger className="w-20">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="10">10</SelectItem>
-              <SelectItem value="25">25</SelectItem>
-              <SelectItem value="50">50</SelectItem>
-              <SelectItem value="100">100</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-        </div>
-      ) : users.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
-          <p>{searchTerm ? 'No users found matching your search' : 'No users found'}</p>
-        </div>
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>{user.name}</TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell>
-                    <Badge className={`${getRoleBadgeColor(user.role)} text-white`}>
-                      {getRoleDisplay(user.role)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleUpdateClick(user)}
-                      >
-                        Edit
-                      </Button>
-
-                      {/* Only show delete button for organizers and attendees, not admins */}
-                      {user.role !== 'ADMIN' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => handleDeleteClick(user)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-
-          {/* Pagination Controls */}
-          {pagination.totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4 pt-4 border-t">
-              <div className="text-sm text-gray-600">
-                Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, pagination.total)} of {pagination.total} users
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  Previous
-                </Button>
-                <div className="text-sm text-gray-600">
-                  Page {currentPage} of {pagination.totalPages}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(prev => Math.min(pagination.totalPages, prev + 1))}
-                  disabled={currentPage === pagination.totalPages}
-                >
-                  Next
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-    </CardContent>
-  </Card>
-
-  {/* 4️⃣ Single reusable dialog */}
-  <Dialog open={updateDialogOpen} onOpenChange={setUpdateDialogOpen}>
-    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-      <DialogHeader>
-        <DialogTitle>Update User</DialogTitle>
-      </DialogHeader>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="name">Name</Label>
-          <Input
-            id="name"
-            value={updatedUserData.name}
-            onChange={(e) =>
-              setUpdatedUserData({ ...updatedUserData, name: e.target.value })
-            }
-            placeholder="Enter name"
-            autoFocus
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            value={updatedUserData.email}
-            onChange={(e) =>
-              setUpdatedUserData({ ...updatedUserData, email: e.target.value })
-            }
-            placeholder="Enter email"
-          />
-        </div>
-        <div className="space-y-2 col-span-2">
-          <Label htmlFor="role">Role</Label>
-          <Select
-            value={updatedUserData.role}
-            onValueChange={(value: string) =>
-              setUpdatedUserData({ ...updatedUserData, role: value as User['role'] })
-            }
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select role" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ADMIN">Admin</SelectItem>
-              <SelectItem value="ORGANIZER">Organizer</SelectItem>
-              <SelectItem value="ATTENDEE">Attendee</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex justify-end gap-2 pt-4 col-span-2">
-          <Button
-            variant="outline"
-            onClick={() => {
-              setUpdateDialogOpen(false);
-              setUserToUpdate(null);
-            }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleUpdateUser}
-            className="bg-[#0F6AB4] hover:bg-[#0D5A9A]"
-          >
-            Update User
-          </Button>
-        </div>
-      </div>
-    </DialogContent>
-  </Dialog>
-</TabsContent>
-
-
-          <TabsContent value="venues" className="mt-6">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Venues Overview</CardTitle>
-                  <Button variant="outline" onClick={handleExportVenues}>
-                    <Download className="w-4 h-4 mr-2" />
-                    Export Venues
-                  </Button>
+                  <CardTitle>User Management</CardTitle>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={handleExportUsers}>
+                      <Download className="w-4 h-4 mr-2" />
+                      Export Users
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
-                {venues.length === 0 ? (
+                {/* Search, Role Filter, and Page Size Controls */}
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      placeholder="Search by name or email..."
+                      value={searchTerm}
+                      onChange={(e) => {
+                        setSearchTerm(e.target.value);
+                        setCurrentPage(1); // Reset to first page on search
+                      }}
+                      className="pl-10"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="roleFilter" className="text-sm text-gray-600">Role:</Label>
+                    <Select
+                      value={roleFilter}
+                      onValueChange={(value: string) => {
+                        setRoleFilter(value);
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="w-32">
+                        <SelectValue placeholder="All roles" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All roles</SelectItem>
+                        <SelectItem value="ORGANIZER">Organizer</SelectItem>
+                        <SelectItem value="ATTENDEE">Attendee</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="pageSize" className="text-sm text-gray-600">Per page:</Label>
+                    <Select
+                      value={pageSize.toString()}
+                      onValueChange={(value: string) => {
+                        setPageSize(parseInt(value));
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="w-20">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="25">25</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {loading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+                  </div>
+                ) : users.length === 0 ? (
                   <div className="text-center py-12 text-gray-500">
-                    <p>No venues found</p>
+                    <p>{searchTerm ? 'No users found matching your search' : 'No users found'}</p>
                   </div>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Venue Name</TableHead>
-                        <TableHead>Location</TableHead>
-                        <TableHead>Capacity</TableHead>
-                        <TableHead>Hourly Rate</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {venues.map((venue) => {
-                        const utilization = venueUtilizationMap.get(venue.id) || 0;
-                        return (
-                          <TableRow key={venue.id}>
-                            <TableCell>{venue.name}</TableCell>
-                            <TableCell>{venue.location || venue.address}</TableCell>
-                            <TableCell>{venue.capacity} people</TableCell>
+                  <>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Role</TableHead>
+                          <TableHead>Created</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {users.map((user) => (
+                          <TableRow key={user.id}>
+                            <TableCell>{user.name}</TableCell>
+                            <TableCell>{user.email}</TableCell>
                             <TableCell>
-                              {venue.hourlyRate ? `LKR ${parseFloat(venue.hourlyRate).toLocaleString()}/hr` : '-'}
-                            </TableCell>
-                            <TableCell>
-                              <Badge className={utilization > 0 ? "bg-green-500 text-white" : "bg-gray-400 text-white"}>
-                                {utilization > 0 ? 'In Use' : 'Available'}
+                              <Badge className={`${getRoleBadgeColor(user.role)} text-white`}>
+                                {getRoleDisplay(user.role)}
                               </Badge>
                             </TableCell>
+                            <TableCell>
+                              {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleUpdateClick(user)}
+                                >
+                                  Edit
+                                </Button>
+
+                                {/* Only show delete button for organizers and attendees, not admins */}
+                                {user.role !== 'ADMIN' && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    onClick={() => handleDeleteClick(user)}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
                           </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+                        ))}
+                      </TableBody>
+                    </Table>
+
+                    {/* Pagination Controls */}
+                    {pagination.totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                        <div className="text-sm text-gray-600">
+                          Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, pagination.total)} of {pagination.total} users
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                            disabled={currentPage === 1}
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                            Previous
+                          </Button>
+                          <div className="text-sm text-gray-600">
+                            Page {currentPage} of {pagination.totalPages}
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(prev => Math.min(pagination.totalPages, prev + 1))}
+                            disabled={currentPage === pagination.totalPages}
+                          >
+                            Next
+                            <ChevronRight className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
+
+            {/* 4️⃣ Single reusable dialog */}
+            <Dialog open={updateDialogOpen} onOpenChange={setUpdateDialogOpen}>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Update User</DialogTitle>
+                </DialogHeader>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Name</Label>
+                    <Input
+                      id="name"
+                      value={updatedUserData.name}
+                      onChange={(e) =>
+                        setUpdatedUserData({ ...updatedUserData, name: e.target.value })
+                      }
+                      placeholder="Enter name"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      value={updatedUserData.email}
+                      onChange={(e) =>
+                        setUpdatedUserData({ ...updatedUserData, email: e.target.value })
+                      }
+                      placeholder="Enter email"
+                    />
+                  </div>
+                  <div className="space-y-2 col-span-2">
+                    <Label htmlFor="role">Role</Label>
+                    <Select
+                      value={updatedUserData.role}
+                      onValueChange={(value: string) =>
+                        setUpdatedUserData({ ...updatedUserData, role: value as User['role'] })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ADMIN">Admin</SelectItem>
+                        <SelectItem value="ORGANIZER">Organizer</SelectItem>
+                        <SelectItem value="ATTENDEE">Attendee</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-4 col-span-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setUpdateDialogOpen(false);
+                        setUserToUpdate(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleUpdateUser}
+                      className="bg-[#0F6AB4] hover:bg-[#0D5A9A]"
+                    >
+                      Update User
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
           <TabsContent value="financial" className="mt-6">
