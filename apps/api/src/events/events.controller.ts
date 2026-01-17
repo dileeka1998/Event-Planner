@@ -1,6 +1,8 @@
-import { Controller, Get, Post, Body, UseGuards, Param, ParseIntPipe, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Param, ParseIntPipe, Request, Patch, Delete } from '@nestjs/common';
 import { EventsService } from './events.service';
 import { CreateEventDto } from './dto/create-event.dto';
+import { CreateBudgetItemDto } from './dto/create-budget-item.dto';
+import { UpdateBudgetItemDto } from './dto/update-budget-item.dto';
 import { AiService } from '../ai/ai.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -69,5 +71,58 @@ export class EventsController {
     
     console.log('Final DTO before service - expectedAudience:', dto.expectedAudience, 'venueId:', dto.venueId);
     return this.events.create(dto);
+  }
+
+  @Post(':eventId/budget/items')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create a new budget item for an event' })
+  @ApiResponse({ status: 201, description: 'Budget item created successfully.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 404, description: 'Event not found.' })
+  @ApiResponse({ status: 403, description: 'Forbidden - not the event organizer.' })
+  async createBudgetItem(
+    @Param('eventId', ParseIntPipe) eventId: number,
+    @Body() dto: CreateBudgetItemDto,
+    @Request() req: any,
+  ) {
+    const organizerId = req.user.userId;
+    return this.events.createBudgetItem(eventId, dto, organizerId);
+  }
+
+  @Patch(':eventId/budget/items/:itemId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update an existing budget item' })
+  @ApiResponse({ status: 200, description: 'Budget item updated successfully.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 404, description: 'Budget item not found.' })
+  @ApiResponse({ status: 403, description: 'Forbidden - not the event organizer.' })
+  async updateBudgetItem(
+    @Param('eventId', ParseIntPipe) eventId: number,
+    @Param('itemId', ParseIntPipe) itemId: number,
+    @Body() dto: UpdateBudgetItemDto,
+    @Request() req: any,
+  ) {
+    const organizerId = req.user.userId;
+    return this.events.updateBudgetItem(eventId, itemId, dto, organizerId);
+  }
+
+  @Delete(':eventId/budget/items/:itemId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a budget item' })
+  @ApiResponse({ status: 200, description: 'Budget item deleted successfully.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 404, description: 'Budget item not found.' })
+  @ApiResponse({ status: 403, description: 'Forbidden - not the event organizer.' })
+  async deleteBudgetItem(
+    @Param('eventId', ParseIntPipe) eventId: number,
+    @Param('itemId', ParseIntPipe) itemId: number,
+    @Request() req: any,
+  ) {
+    const organizerId = req.user.userId;
+    await this.events.deleteBudgetItem(eventId, itemId, organizerId);
+    return { message: 'Budget item deleted successfully' };
   }
 }
