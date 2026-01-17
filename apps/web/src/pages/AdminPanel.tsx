@@ -26,6 +26,8 @@ import { getErrorMessage } from '../utils/errorHandler';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 
 export function AdminPanel() {
   const [users, setUsers] = useState<User[]>([]);
@@ -43,27 +45,90 @@ export function AdminPanel() {
   const [updatedUserData, setUpdatedUserData] = useState({
     name: "",
     email: "",
+    role: "" as User['role'] | "",
   });
 
+  // Pagination and search state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [pagination, setPagination] = useState({
+    total: 0,
+    totalPages: 0,
+  });
+
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
   useEffect(() => {
-    fetchAllData();
+    const loadData = async () => {
+      await fetchAllData();
+      setIsInitialLoad(false);
+    };
+    loadData();
   }, []);
+
+  useEffect(() => {
+    // Skip initial mount - fetchAllData handles that
+    // Only fetch when filters change after initial load
+    if (!isInitialLoad) {
+      fetchUsers();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, pageSize, searchTerm, roleFilter]);
+
+  const fetchUsers = async (skipLoading = false) => {
+    if (!skipLoading) {
+      setLoading(true);
+    }
+    try {
+      const response = await getUsers({
+        page: currentPage,
+        limit: pageSize,
+        search: searchTerm || undefined,
+        role: roleFilter && roleFilter !== "all" ? roleFilter : undefined,
+      });
+      
+      console.log('Users API response:', response);
+      
+      if (response.data) {
+        setUsers(response.data.data || []);
+        setPagination(response.data.pagination || { total: 0, totalPages: 0 });
+      } else {
+        // Handle case where response structure might be different
+        console.warn('Unexpected response structure:', response);
+        setUsers([]);
+        setPagination({ total: 0, totalPages: 0 });
+      }
+    } catch (error: any) {
+      console.error('Error fetching users:', error);
+      console.error('Error response:', error?.response);
+      toast.error(error?.response?.data?.message || 'Failed to fetch users');
+      setUsers([]);
+      setPagination({ total: 0, totalPages: 0 });
+    } finally {
+      if (!skipLoading) {
+        setLoading(false);
+      }
+    }
+  };
 
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      const [usersRes, venuesRes, eventsRes] = await Promise.all([
-        getUsers().catch(() => ({ data: [] })),
+      const [venuesRes, eventsRes] = await Promise.all([
         getVenues().catch(() => ({ data: [] })),
         getEvents().catch(() => ({ data: [] })),
       ]);
 
-      setUsers(usersRes.data || []);
       setVenues((venuesRes.data || []).map((v: any) => ({
         ...v,
         location: v.address?.split(',')?.pop()?.trim() || '',
       })));
       setEvents(eventsRes.data || []);
+      
+      // Fetch users with pagination (skip loading since fetchAllData already set it)
+      await fetchUsers(true);
     } catch (error: any) {
       toast.error('Failed to fetch admin data');
       console.error(error);
@@ -91,6 +156,11 @@ export function AdminPanel() {
   };
 
   const handleDeleteClick = (user: User) => {
+    // Only allow deleting organizers and attendees, not admins
+    if (user.role === 'ADMIN') {
+      toast.error('Cannot delete admin users');
+      return;
+    }
     setUserToDelete(user);
     setDeleteDialogOpen(true);
   };
@@ -104,8 +174,8 @@ export function AdminPanel() {
       await deleteUser(userToDelete.id);
       console.log('User deleted successfully');
       toast.success(`User ${userToDelete.name} has been deleted`);
-      // Remove user from list
-      setUsers(users.filter(u => u.id !== userToDelete.id));
+      // Refresh users list
+      await fetchUsers();
       setDeleteDialogOpen(false);
       setUserToDelete(null);
     } catch (error: any) {
@@ -130,6 +200,7 @@ export function AdminPanel() {
     setUpdatedUserData({
       name: user.name,
       email: user.email,
+      role: user.role,
     });
     setUpdateDialogOpen(true);
   };
@@ -139,18 +210,21 @@ export function AdminPanel() {
     if (!userToUpdate) return;
 
     try {
-      const updated = {
+      const updated: any = {
         name: updatedUserData.name,
         email: updatedUserData.email,
       };
 
+      // Include role if it's been changed and is not empty
+      if (updatedUserData.role && updatedUserData.role !== userToUpdate.role) {
+        updated.role = updatedUserData.role;
+      }
+
       await updateUser(userToUpdate.id, updated);
       toast.success(`User ${userToUpdate.name} updated successfully`);
 
-      //update local view
-      setUsers(
-        users.map((u) => (u.id === userToUpdate.id ? { ...u, ...updated } : u))
-      );
+      // Refresh users list
+      await fetchUsers();
 
       setUpdateDialogOpen(false);
       setUserToUpdate(null);
@@ -263,58 +337,154 @@ export function AdminPanel() {
       </div>
     </CardHeader>
     <CardContent>
-      {users.length === 0 ? (
+      {/* Search, Role Filter, and Page Size Controls */}
+      <div className="flex items-center gap-4 mb-4">
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <Input
+            placeholder="Search by name or email..."
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1); // Reset to first page on search
+            }}
+            className="pl-10"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Label htmlFor="roleFilter" className="text-sm text-gray-600">Role:</Label>
+          <Select
+            value={roleFilter}
+            onValueChange={(value: string) => {
+              setRoleFilter(value);
+              setCurrentPage(1);
+            }}
+          >
+            <SelectTrigger className="w-32">
+              <SelectValue placeholder="All roles" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All roles</SelectItem>
+              <SelectItem value="ORGANIZER">Organizer</SelectItem>
+              <SelectItem value="ATTENDEE">Attendee</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2">
+          <Label htmlFor="pageSize" className="text-sm text-gray-600">Per page:</Label>
+          <Select
+            value={pageSize.toString()}
+            onValueChange={(value: string) => {
+              setPageSize(parseInt(value));
+              setCurrentPage(1);
+            }}
+          >
+            <SelectTrigger className="w-20">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="10">10</SelectItem>
+              <SelectItem value="25">25</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+              <SelectItem value="100">100</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+        </div>
+      ) : users.length === 0 ? (
         <div className="text-center py-12 text-gray-500">
-          <p>No users found</p>
+          <p>{searchTerm ? 'No users found matching your search' : 'No users found'}</p>
         </div>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell>{user.name}</TableCell>
-                <TableCell>{user.email}</TableCell>
-                <TableCell>
-                  <Badge className={`${getRoleBadgeColor(user.role)} text-white`}>
-                    {getRoleDisplay(user.role)}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
-                </TableCell>
-                <TableCell>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleUpdateClick(user)}
-                    >
-                      Edit
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => handleDeleteClick(user)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </TableCell>
+        <>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {users.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell>{user.name}</TableCell>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell>
+                    <Badge className={`${getRoleBadgeColor(user.role)} text-white`}>
+                      {getRoleDisplay(user.role)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleUpdateClick(user)}
+                      >
+                        Edit
+                      </Button>
+
+                      {/* Only show delete button for organizers and attendees, not admins */}
+                      {user.role !== 'ADMIN' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleDeleteClick(user)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+
+          {/* Pagination Controls */}
+          {pagination.totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4 pt-4 border-t">
+              <div className="text-sm text-gray-600">
+                Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, pagination.total)} of {pagination.total} users
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Previous
+                </Button>
+                <div className="text-sm text-gray-600">
+                  Page {currentPage} of {pagination.totalPages}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(pagination.totalPages, prev + 1))}
+                  disabled={currentPage === pagination.totalPages}
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </CardContent>
   </Card>
@@ -349,7 +519,34 @@ export function AdminPanel() {
             placeholder="Enter email"
           />
         </div>
+        <div className="space-y-2 col-span-2">
+          <Label htmlFor="role">Role</Label>
+          <Select
+            value={updatedUserData.role}
+            onValueChange={(value: string) =>
+              setUpdatedUserData({ ...updatedUserData, role: value as User['role'] })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select role" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ADMIN">Admin</SelectItem>
+              <SelectItem value="ORGANIZER">Organizer</SelectItem>
+              <SelectItem value="ATTENDEE">Attendee</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex justify-end gap-2 pt-4 col-span-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setUpdateDialogOpen(false);
+              setUserToUpdate(null);
+            }}
+          >
+            Cancel
+          </Button>
           <Button
             onClick={handleUpdateUser}
             className="bg-[#0F6AB4] hover:bg-[#0D5A9A]"

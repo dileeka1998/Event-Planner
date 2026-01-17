@@ -50,6 +50,12 @@ export class EventsService {
         throw new BadRequestException(`Venue with ID ${dto.venueId} not found`);
       }
 
+      // Verify venue belongs to the organizer
+      if (venue.organizer.id !== dto.organizerId) {
+        this.logger.warn(`Event creation failed: Venue ${venue.id} does not belong to organizer ${dto.organizerId}`);
+        throw new BadRequestException(`Venue "${venue.name}" does not belong to you. Please select a venue you created.`);
+      }
+
       this.logger.log(`Venue found: ${venue.name} (capacity: ${venue.capacity})`);
       this.logger.log(`Expected audience: ${dto.expectedAudience}`);
 
@@ -193,8 +199,15 @@ export class EventsService {
     ];
   }
 
-  findAll() {
-    this.logger.log('Fetching all events');
+  findAll(organizerId?: number) {
+    if (organizerId) {
+      this.logger.log(`Fetching events for organizer ${organizerId}`);
+      return this.eventRepo.find({
+        where: { organizer: { id: organizerId } },
+        relations: ['organizer', 'venue', 'eventBudget', 'eventBudget.items', 'attendees', 'attendees.user', 'rooms', 'sessions'],
+      });
+    }
+    this.logger.log('Fetching all events (no organizer filter)');
     return this.eventRepo.find({
       relations: ['organizer', 'venue', 'eventBudget', 'eventBudget.items', 'attendees', 'attendees.user', 'rooms', 'sessions'],
     });

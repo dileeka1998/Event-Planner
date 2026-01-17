@@ -29,11 +29,17 @@ export class RoomsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all rooms for an event' })
+  @ApiOperation({ summary: 'Get all rooms for an event (Organizer only)' })
   @ApiResponse({ status: 200, description: 'Return all rooms for the event.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden (user is not event organizer).' })
   @ApiResponse({ status: 404, description: 'Event not found.' })
-  async findAll(@Param('eventId', ParseIntPipe) eventId: number) {
-    return this.roomsService.findAll(eventId);
+  async findAll(
+    @Param('eventId', ParseIntPipe) eventId: number,
+    @Request() req: any,
+  ) {
+    const organizerId = req.user.userId;
+    return this.roomsService.findAll(eventId, organizerId);
   }
 
   @Get(':roomId')

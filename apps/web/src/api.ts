@@ -93,7 +93,15 @@ export const registerAttendee = (eventId: number) => api.post(`/events/${eventId
 export const leaveEvent = (eventId: number) => api.delete(`/events/${eventId}/attendees/me`);
 
 // Users (for admin panel)
-export const getUsers = () => api.get('/users');
+export const getUsers = (params?: { page?: number; limit?: number; search?: string; role?: string }) => {
+  const queryParams = new URLSearchParams();
+  if (params?.page) queryParams.append('page', params.page.toString());
+  if (params?.limit) queryParams.append('limit', params.limit.toString());
+  if (params?.search) queryParams.append('search', params.search);
+  if (params?.role) queryParams.append('role', params.role);
+  const queryString = queryParams.toString();
+  return api.get(`/admin/users${queryString ? `?${queryString}` : ''}`);
+};
 
 // Admin
 export const deleteUser = (id: number) => api.delete(`/admin/users/${id}`);
