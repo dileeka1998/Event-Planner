@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Label } from '../components/ui/label';
 import { toast } from 'sonner';
 import { KPICard } from '../components/dashboard/KPICard';
-import { getEvent, getEvents } from '../api';
+import { getEvent, getEvents, createBudgetItem, updateBudgetItem, deleteBudgetItem } from '../api';
 import { Event } from '../types';
 
 export function BudgetPage() {
@@ -50,6 +50,27 @@ export function BudgetPage() {
     }
   };
 
+  // Helper function to map backend status to frontend display status
+  const mapStatusToFrontend = (status: string): 'Planned' | 'Pending' | 'Paid' => {
+    switch (status) {
+      case 'PLANNED': return 'Planned';
+      case 'APPROVED':
+      case 'PURCHASED': return 'Pending';
+      case 'PAID': return 'Paid';
+      default: return 'Planned';
+    }
+  };
+
+  // Helper function to map frontend status to backend status
+  const mapStatusToBackend = (status: string): 'PLANNED' | 'APPROVED' | 'PURCHASED' | 'PAID' => {
+    switch (status) {
+      case 'Planned': return 'PLANNED';
+      case 'Pending': return 'APPROVED'; // Frontend 'Pending' maps to 'APPROVED'
+      case 'Paid': return 'PAID';
+      default: return 'PLANNED';
+    }
+  };
+
   const fetchBudget = async (eventId: number) => {
     setLoading(true);
     try {
@@ -64,10 +85,7 @@ export function BudgetPage() {
           estimatedCost: parseFloat(item.estimatedAmount || '0'),
           actualCost: parseFloat(item.actualAmount || '0'),
           vendor: item.vendor || '',
-          status: item.status === 'PLANNED' ? 'Planned' : 
-                 item.status === 'APPROVED' ? 'Pending' :
-                 item.status === 'PURCHASED' ? 'Pending' :
-                 item.status === 'PAID' ? 'Paid' : 'Planned',
+          status: mapStatusToFrontend(item.status || 'PLANNED'),
         })));
       } else {
         setLineItems([]);
@@ -80,19 +98,89 @@ export function BudgetPage() {
     }
   };
 
-  const handleAddItem = (item: Omit<BudgetLineItem, 'id'>) => {
-    // Note: This would need a backend endpoint to add budget items
-    toast.info('Budget item addition requires backend support');
+  const handleAddItem = async (item: Omit<BudgetLineItem, 'id'>) => {
+    if (!selectedEventId) {
+      toast.error('Please select an event first');
+      return;
+    }
+
+    try {
+      // Convert frontend format to API format
+      const apiData = {
+        category: item.category,
+        description: item.description || undefined,
+        estimatedAmount: (item.estimatedCost || 0).toString(),
+        actualAmount: (item.actualCost || 0).toString(),
+        quantity: item.quantity || 1,
+        unit: item.unit || undefined,
+        vendor: item.vendor || undefined,
+        status: mapStatusToBackend(item.status || 'Planned'),
+      };
+
+      await createBudgetItem(selectedEventId, apiData);
+      toast.success('Budget item added successfully');
+      
+      // Refresh budget data
+      await fetchBudget(selectedEventId);
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || 'Failed to add budget item';
+      toast.error(errorMessage);
+      console.error(error);
+    }
   };
 
-  const handleUpdateItem = (id: number, updates: Partial<BudgetLineItem>) => {
-    // Note: This would need a backend endpoint to update budget items
-    toast.info('Budget item update requires backend support');
+  const handleUpdateItem = async (id: number, updates: Partial<BudgetLineItem>) => {
+    if (!selectedEventId) {
+      toast.error('Please select an event first');
+      return;
+    }
+
+    try {
+      // Convert frontend format to API format
+      const apiData: any = {};
+      
+      if (updates.category !== undefined) apiData.category = updates.category;
+      if (updates.description !== undefined) apiData.description = updates.description;
+      if (updates.estimatedCost !== undefined) apiData.estimatedAmount = updates.estimatedCost.toString();
+      if (updates.actualCost !== undefined) apiData.actualAmount = updates.actualCost.toString();
+      if (updates.quantity !== undefined) apiData.quantity = updates.quantity;
+      if (updates.unit !== undefined) apiData.unit = updates.unit;
+      if (updates.vendor !== undefined) apiData.vendor = updates.vendor;
+      if (updates.status !== undefined) apiData.status = mapStatusToBackend(updates.status);
+
+      await updateBudgetItem(selectedEventId, id, apiData);
+      toast.success('Budget item updated successfully');
+      
+      // Refresh budget data
+      await fetchBudget(selectedEventId);
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || 'Failed to update budget item';
+      toast.error(errorMessage);
+      console.error(error);
+    }
   };
 
-  const handleDeleteItem = (id: number) => {
-    // Note: This would need a backend endpoint to delete budget items
-    toast.info('Budget item deletion requires backend support');
+  const handleDeleteItem = async (id: number) => {
+    if (!selectedEventId) {
+      toast.error('Please select an event first');
+      return;
+    }
+
+    if (!confirm('Are you sure you want to delete this budget item?')) {
+      return;
+    }
+
+    try {
+      await deleteBudgetItem(selectedEventId, id);
+      toast.success('Budget item deleted successfully');
+      
+      // Refresh budget data
+      await fetchBudget(selectedEventId);
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || 'Failed to delete budget item';
+      toast.error(errorMessage);
+      console.error(error);
+    }
   };
 
   const totalEstimated = lineItems.reduce((sum, item) => sum + (item.estimatedCost || 0), 0);

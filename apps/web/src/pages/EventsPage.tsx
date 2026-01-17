@@ -298,6 +298,24 @@ export function EventsPage({ onNavigate }: EventsPageProps = {}) {
       return;
     }
 
+    // Validate that start date is not in the past
+    const startDate = new Date(eventDetails.startDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    startDate.setHours(0, 0, 0, 0);
+    
+    if (startDate < today) {
+      toast.error('Start date cannot be in the past');
+      return;
+    }
+
+    // Validate that start date is not after end date
+    const endDate = new Date(eventDetails.endDate);
+    if (startDate > endDate) {
+      toast.error('Start date cannot be after end date');
+      return;
+    }
+
     // Debug: log what we're sending
     console.log('Creating event with:', {
       expectedAudience: eventDetails.expectedAudience,
@@ -423,6 +441,8 @@ export function EventsPage({ onNavigate }: EventsPageProps = {}) {
                       id="startDate"
                       type="date"
                       value={eventDetails.startDate}
+                      min={new Date().toISOString().split('T')[0]}
+                      max={eventDetails.endDate || undefined}
                       onChange={(e) => setEventDetails({...eventDetails, startDate: e.target.value})}
                     />
                   </div>
@@ -432,6 +452,7 @@ export function EventsPage({ onNavigate }: EventsPageProps = {}) {
                       id="endDate"
                       type="date"
                       value={eventDetails.endDate}
+                      min={eventDetails.startDate || new Date().toISOString().split('T')[0]}
                       onChange={(e) => setEventDetails({...eventDetails, endDate: e.target.value})}
                     />
                   </div>

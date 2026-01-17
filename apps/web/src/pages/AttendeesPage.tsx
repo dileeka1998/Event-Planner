@@ -62,7 +62,9 @@ export function AttendeesPage() {
     setLoading(true);
     try {
       const { data } = await getEventAttendees(eventId);
-      setAttendees(data.map((a: any) => ({
+      // Filter out CANCELLED attendees from display (backend should already exclude them, but double-check)
+      const activeAttendees = data.filter((a: any) => a.status !== 'CANCELLED');
+      setAttendees(activeAttendees.map((a: any) => ({
         id: a.id,
         name: a.user?.name || '',
         email: a.user?.email || '',

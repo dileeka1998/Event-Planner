@@ -171,8 +171,12 @@ export function RSVPPage({ userRole }: RSVPPageProps) {
   const handleRegister = async (eventId: number) => {
     setRegisteringEventId(eventId);
     try {
-      await registerAttendee(eventId);
-      toast.success('Successfully registered for event!');
+      const response = await registerAttendee(eventId);
+      const status = response?.data?.status || 'CONFIRMED';
+      const statusMessage = status === 'WAITLISTED' 
+        ? 'Successfully added to waitlist!' 
+        : 'Successfully registered for event!';
+      toast.success(statusMessage);
       await fetchMyRegistrations();
       await fetchAvailableEvents();
       await fetchMySessions();

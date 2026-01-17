@@ -29,10 +29,16 @@ export class VenuesService {
     return this.repo.save(venue);
   }
 
-  async findAll(organizerId: number) {
-    this.logger.log(`Fetching venues for organizer ${organizerId}`);
+  async findAll(organizerId?: number) {
+    if (organizerId) {
+      this.logger.log(`Fetching venues for organizer ${organizerId}`);
+      return this.repo.find({
+        where: { organizer: { id: organizerId } },
+        relations: ['organizer'],
+      });
+    }
+    this.logger.log('Fetching all venues (no organizer filter)');
     return this.repo.find({
-      where: { organizer: { id: organizerId } },
       relations: ['organizer'],
     });
   }

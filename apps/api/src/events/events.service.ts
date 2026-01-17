@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Event } from './event.entity';
@@ -8,6 +8,8 @@ import { Venue } from './venue.entity';
 import { UsersService } from '../users/users.service';
 import { VenuesService } from '../venues/venues.service';
 import { CreateEventDto, BudgetItemDto } from './dto/create-event.dto';
+import { CreateBudgetItemDto } from './dto/create-budget-item.dto';
+import { UpdateBudgetItemDto } from './dto/update-budget-item.dto';
 
 @Injectable()
 export class EventsService {
@@ -251,4 +253,182 @@ export class EventsService {
 
   return await query.getMany();
 }
+
+  async createBudgetItem(eventId: number, dto: CreateBudgetItemDto, organizerId: number) {
+    this.logger.log(`Creating budget item for event ${eventId}`);
+    
+    // Verify event exists and belongs to organizer
+    const event = await this.eventRepo.findOne({
+      where: { id: eventId },
+      relations: ['organizer', 'eventBudget'],
+    });
+    
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+    
+    if (event.organizer.id !== organizerId) {
+      throw new ForbiddenException('You can only manage budget items for your own events');
+    }
+    
+    // Get or create event budget
+    let eventBudget = event.eventBudget;
+    if (!eventBudget) {
+      this.logger.log(`Creating new event budget for event ${eventId}`);
+      eventBudget = this.budgetRepo.create({
+        event: event,
+        totalEstimated: '0',
+        totalActual: '0',
+      });
+      eventBudget = await this.budgetRepo.save(eventBudget);
+    }
+    
+    // Create budget item
+    const status: BudgetItemStatus = dto.status ? (dto.status as BudgetItemStatus) : BudgetItemStatus.PLANNED;
+    const budgetItem = this.budgetItemRepo.create({
+      eventBudget: eventBudget,
+      category: dto.category,
+      description: dto.description,
+      estimatedAmount: dto.estimatedAmount,
+      actualAmount: dto.actualAmount || '0',
+      quantity: dto.quantity || 1,
+      unit: dto.unit,
+      vendor: dto.vendor,
+      status: status,
+    });
+    
+    const savedItem = await this.budgetItemRepo.save(budgetItem);
+    
+    // Recalculate budget totals
+    await this.recalculateBudgetTotals(eventBudget.id);
+    
+    this.logger.log(`Budget item created with ID: ${savedItem.id}`);
+    return savedItem;
+  }
+
+  async updateBudgetItem(eventId: number, itemId: number, dto: UpdateBudgetItemDto, organizerId: number) {
+    this.logger.log(`Updating budget item ${itemId} for event ${eventId}`);
+    
+    // Verify event exists and belongs to organizer
+    const event = await this.eventRepo.findOne({
+      where: { id: eventId },
+      relations: ['organizer'],
+    });
+    
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+    
+    if (event.organizer.id !== organizerId) {
+      throw new ForbiddenException('You can only manage budget items for your own events');
+    }
+    
+    // Find budget item
+    const budgetItem = await this.budgetItemRepo.findOne({
+      where: { id: itemId },
+      relations: ['eventBudget', 'eventBudget.event'],
+    });
+    
+    if (!budgetItem) {
+      throw new NotFoundException(`Budget item with ID ${itemId} not found`);
+    }
+    
+    // Verify item belongs to the event
+    if (budgetItem.eventBudget.event.id !== eventId) {
+      throw new BadRequestException('Budget item does not belong to this event');
+    }
+    
+    // Update fields
+    if (dto.category !== undefined) budgetItem.category = dto.category;
+    if (dto.description !== undefined) budgetItem.description = dto.description;
+    if (dto.estimatedAmount !== undefined) budgetItem.estimatedAmount = dto.estimatedAmount;
+    if (dto.actualAmount !== undefined) budgetItem.actualAmount = dto.actualAmount;
+    if (dto.quantity !== undefined) budgetItem.quantity = dto.quantity;
+    if (dto.unit !== undefined) budgetItem.unit = dto.unit;
+    if (dto.vendor !== undefined) budgetItem.vendor = dto.vendor;
+    if (dto.status !== undefined) budgetItem.status = dto.status as BudgetItemStatus;
+    
+    const updatedItem = await this.budgetItemRepo.save(budgetItem);
+    
+    // Recalculate budget totals
+    await this.recalculateBudgetTotals(budgetItem.eventBudget.id);
+    
+    this.logger.log(`Budget item ${itemId} updated successfully`);
+    return updatedItem;
+  }
+
+  async deleteBudgetItem(eventId: number, itemId: number, organizerId: number) {
+    this.logger.log(`Deleting budget item ${itemId} for event ${eventId}`);
+    
+    // Verify event exists and belongs to organizer
+    const event = await this.eventRepo.findOne({
+      where: { id: eventId },
+      relations: ['organizer'],
+    });
+    
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+    
+    if (event.organizer.id !== organizerId) {
+      throw new ForbiddenException('You can only manage budget items for your own events');
+    }
+    
+    // Find budget item
+    const budgetItem = await this.budgetItemRepo.findOne({
+      where: { id: itemId },
+      relations: ['eventBudget', 'eventBudget.event'],
+    });
+    
+    if (!budgetItem) {
+      throw new NotFoundException(`Budget item with ID ${itemId} not found`);
+    }
+    
+    // Verify item belongs to the event
+    if (budgetItem.eventBudget.event.id !== eventId) {
+      throw new BadRequestException('Budget item does not belong to this event');
+    }
+    
+    const eventBudgetId = budgetItem.eventBudget.id;
+    
+    // Delete the item
+    await this.budgetItemRepo.remove(budgetItem);
+    
+    // Recalculate budget totals
+    await this.recalculateBudgetTotals(eventBudgetId);
+    
+    this.logger.log(`Budget item ${itemId} deleted successfully`);
+  }
+
+  private async recalculateBudgetTotals(eventBudgetId: number) {
+    this.logger.log(`Recalculating budget totals for budget ${eventBudgetId}`);
+    
+    const eventBudget = await this.budgetRepo.findOne({
+      where: { id: eventBudgetId },
+      relations: ['items'],
+    });
+    
+    if (!eventBudget) {
+      this.logger.warn(`Event budget ${eventBudgetId} not found for recalculation`);
+      return;
+    }
+    
+    // Calculate totals from all items
+    const totalEstimated = eventBudget.items.reduce(
+      (sum, item) => sum + parseFloat(item.estimatedAmount || '0') * (item.quantity || 1),
+      0,
+    ).toFixed(2);
+    
+    const totalActual = eventBudget.items.reduce(
+      (sum, item) => sum + parseFloat(item.actualAmount || '0'),
+      0,
+    ).toFixed(2);
+    
+    eventBudget.totalEstimated = totalEstimated;
+    eventBudget.totalActual = totalActual;
+    
+    await this.budgetRepo.save(eventBudget);
+    
+    this.logger.log(`Budget totals recalculated: Estimated=${totalEstimated}, Actual=${totalActual}`);
+  }
 }

@@ -21,11 +21,13 @@ export function DashboardLayout({
 }: DashboardLayoutProps) {
   // Map backend role enum to Sidebar expected format
   const mapRole = (role: string): 'Admin' | 'Organizer' | 'Attendee' => {
-    switch (role) {
+    // Normalize role to uppercase for comparison
+    const normalizedRole = (role || '').toUpperCase();
+    switch (normalizedRole) {
       case 'ADMIN': return 'Admin';
       case 'ORGANIZER': return 'Organizer';
       case 'ATTENDEE': return 'Attendee';
-      default: return 'Attendee';
+      default: return 'Attendee'; // Default to Attendee for safety
     }
   };
 

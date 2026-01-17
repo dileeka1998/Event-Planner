@@ -165,6 +165,32 @@ export const generateSchedule = (eventId: number, gapMinutes: number = 0, dryRun
 export const applySchedule = (eventId: number, assignments: Array<{ sessionId: number; roomId?: number | null; startTime?: string | null }>) =>
   api.post(`/events/${eventId}/schedule/apply`, { assignments });
 
+// Budget Items
+export const createBudgetItem = (eventId: number, data: {
+  category: string;
+  description?: string;
+  estimatedAmount: string;
+  actualAmount?: string;
+  quantity?: number;
+  unit?: string;
+  vendor?: string;
+  status?: 'PLANNED' | 'APPROVED' | 'PURCHASED' | 'PAID';
+}) => api.post(`/events/${eventId}/budget/items`, data);
+
+export const updateBudgetItem = (eventId: number, itemId: number, data: {
+  category?: string;
+  description?: string;
+  estimatedAmount?: string;
+  actualAmount?: string;
+  quantity?: number;
+  unit?: string;
+  vendor?: string;
+  status?: 'PLANNED' | 'APPROVED' | 'PURCHASED' | 'PAID';
+}) => api.patch(`/events/${eventId}/budget/items/${itemId}`, data);
+
+export const deleteBudgetItem = (eventId: number, itemId: number) =>
+  api.delete(`/events/${eventId}/budget/items/${itemId}`);
+
 // User Profile
 export const updateProfile = (data: { name?: string; email?: string }) =>
   api.patch('/users/me', data);

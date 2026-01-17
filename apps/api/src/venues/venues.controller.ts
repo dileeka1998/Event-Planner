@@ -3,6 +3,7 @@ import { VenuesService } from './venues.service';
 import { CreateVenueDto } from './dto/create-venue.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { UserRole } from '../users/user.entity';
 
 @ApiTags('venues')
 @Controller('venues')
@@ -12,10 +13,15 @@ export class VenuesController {
   @Get()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get all venues for the authenticated organizer' })
-  @ApiResponse({ status: 200, description: 'Return all venues used in organizer events.' })
+  @ApiOperation({ summary: 'Get all venues - returns all venues for admins, organizer venues for organizers' })
+  @ApiResponse({ status: 200, description: 'Return all venues (admin) or venues for the organizer.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   findAll(@Request() req: any) {
+    // If user is admin, return all venues (no organizer filter)
+    if (req.user.role === UserRole.ADMIN) {
+      return this.venuesService.findAll(); // No organizerId = all venues
+    }
+    // Otherwise, return only venues for this organizer
     const organizerId = req.user.userId;
     return this.venuesService.findAll(organizerId);
   }

@@ -9,8 +9,8 @@ import { BudgetLineItem } from '../../types';
 interface BudgetLineTableProps {
   items: BudgetLineItem[];
   onAddItem: (item: Omit<BudgetLineItem, 'id'>) => void;
-  onUpdateItem: (id: string, item: Partial<BudgetLineItem>) => void;
-  onDeleteItem: (id: string) => void;
+  onUpdateItem: (id: number, item: Partial<BudgetLineItem>) => void;
+  onDeleteItem: (id: number) => void;
 }
 
 export function BudgetLineTable({ items, onAddItem, onUpdateItem, onDeleteItem }: BudgetLineTableProps) {
