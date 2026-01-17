@@ -112,12 +112,14 @@ export const updateUser = (id: number, data: any) =>
 // Recommendations
 export const getAttendeeDashboard = () => api.get('/attendees/dashboard');
 
-export const getRecommendedSessions = (filters?: { topic?: string; day?: string; track?: string; showAll?: boolean }) => {
+export const getRecommendedSessions = (filters?: { topic?: string; day?: string; track?: string; showAll?: boolean; page?: number; limit?: number }) => {
   const params = new URLSearchParams();
   if (filters?.topic) params.append('topic', filters.topic);
   if (filters?.day) params.append('day', filters.day);
   if (filters?.track) params.append('track', filters.track);
   if (filters?.showAll !== undefined) params.append('showAll', filters.showAll.toString());
+  if (filters?.page) params.append('page', filters.page.toString());
+  if (filters?.limit) params.append('limit', filters.limit.toString());
   return api.get(`/attendees/recommendations?${params.toString()}`);
 };
 

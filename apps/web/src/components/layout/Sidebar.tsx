@@ -32,7 +32,7 @@ export function Sidebar({ currentPage, onNavigate, userRole }: SidebarProps) {
     { id: 'attendees', label: 'Attendees', icon: UserCheck, roles: ['Admin', 'Organizer'] },
     { id: 'recommendations', label: 'Recommendations', icon: Lightbulb, roles: ['Attendee'] },
     { id: 'rsvp', label: 'My Events', icon: CheckSquare, roles: ['Attendee'] },
-    { id: 'team', label: 'Team', icon: Users, roles: ['Admin', 'Organizer', 'Attendee'] },
+    { id: 'team', label: 'Team', icon: Users, roles: ['Organizer', 'Attendee'] },
   ];
 
   const filteredMenuItems = menuItems.filter(item => item.roles.includes(userRole));
@@ -73,7 +73,7 @@ export function Sidebar({ currentPage, onNavigate, userRole }: SidebarProps) {
         })}
       </nav>
 
-      {userRole !== 'Attendee' && (
+      {userRole === 'Organizer' && (
         <div className="p-4 border-t border-gray-200">
           <div className="bg-gradient-to-br from-[#0F6AB4] to-[#28A9A1] rounded-lg p-4 text-white">
             <p className="text-xs opacity-90 mb-1">Pro Tip</p>

@@ -99,7 +99,9 @@ export class AttendeesRecommendationsController {
   @ApiQuery({ name: 'day', required: false, description: 'Filter by day (Day 1, Day 2, or day of week)' })
   @ApiQuery({ name: 'track', required: false, description: 'Filter by track (same as topic for now)' })
   @ApiQuery({ name: 'showAll', required: false, description: 'If true, show all sessions; if false, only show sessions from registered events', type: Boolean })
-  @ApiResponse({ status: 200, description: 'Return recommended sessions.' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)', type: Number })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (default: 10)', type: Number })
+  @ApiResponse({ status: 200, description: 'Return recommended sessions with pagination.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   getRecommendations(
     @Request() req: any,
@@ -107,9 +109,20 @@ export class AttendeesRecommendationsController {
     @Query('day') day?: string,
     @Query('track') track?: string,
     @Query('showAll') showAll?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     const userId = req.user.userId;
     const showAllBool = showAll === 'true' || showAll === '1';
-    return this.attendeesService.getRecommendedSessions(userId, { topic, day, track, showAll: showAllBool });
+    const pageNum = page ? parseInt(page, 10) : undefined;
+    const limitNum = limit ? parseInt(limit, 10) : undefined;
+    return this.attendeesService.getRecommendedSessions(userId, { 
+      topic, 
+      day, 
+      track, 
+      showAll: showAllBool,
+      page: pageNum,
+      limit: limitNum,
+    });
   }
 }

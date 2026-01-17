@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Label } from '../components/ui/label';
-import { Download, Calendar, Clock, MapPin, Loader2, Users, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react';
+import { Download, Calendar, Clock, MapPin, Loader2, Users, ChevronDown, ChevronUp, ArrowRight, User } from 'lucide-react';
 import { EventAttendee, Event, Session } from '../types';
 import { getEvents, getEventAttendees, leaveEvent, registerAttendee, getAvailableEvents, getMySessions, getEventSessions, getMyRegistrations } from '../api';
 import { toast } from 'sonner';
@@ -253,14 +253,33 @@ export function RSVPPage({ userRole }: RSVPPageProps) {
       }
     });
     
+    // Filter past events: registered events that have ended
+    const past = myRegistrations.filter((r) => {
+      // Check if event has endDate
+      if (!r.event?.endDate) {
+        return false;
+      }
+      
+      try {
+        const eventEnd = new Date(r.event.endDate);
+        if (isNaN(eventEnd.getTime())) {
+          return false;
+        }
+        eventEnd.setHours(23, 59, 59, 999); // End of the day
+        const today = new Date();
+        
+        // Show events that have ended (endDate is before today)
+        return eventEnd < today;
+      } catch (error) {
+        console.error('Error parsing event end date:', error, r.event);
+        return false;
+      }
+    });
+    
     // Debug logging
     console.log('My Registrations:', myRegistrations.length);
     console.log('Upcoming Events:', upcoming.length);
-    console.log('Upcoming events details:', upcoming.map(r => ({
-      title: r.event?.title,
-      startDate: r.event?.startDate,
-      status: r.status
-    })));
+    console.log('Past Events:', past.length);
     const confirmed = myRegistrations.filter(r => r.status === 'CONFIRMED');
     const waitlisted = myRegistrations.filter(r => r.status === 'WAITLISTED');
 
@@ -529,7 +548,7 @@ export function RSVPPage({ userRole }: RSVPPageProps) {
             )}
           </TabsContent>
 
-          <TabsContent value="my-sessions" className="space-y-3 mt-6">
+          <TabsContent value="my-sessions" className="space-y-4 mt-6">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
@@ -537,37 +556,53 @@ export function RSVPPage({ userRole }: RSVPPageProps) {
             ) : mySessions.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
                 <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No sessions scheduled</p>
-                <p className="text-sm mt-2">Register for events to see their sessions</p>
+                <p className="text-gray-900 font-medium">No sessions scheduled</p>
+                <p className="text-sm mt-2 text-gray-600">Register for events to see their sessions</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {mySessions.map((session: Session) => (
-                  <Card key={session.id} className="hover:shadow-md transition-shadow">
+                  <Card key={session.id} className="hover:shadow-lg transition-all border-l-4 border-l-[#0F6AB4]">
                     <CardContent className="p-6">
-                      <div className="flex items-start justify-between">
+                      <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
-                          <h3 className="text-gray-900 font-medium mb-2">{session.title}</h3>
-                          {session.speaker && (
-                            <p className="text-sm text-gray-600 mb-2">{session.speaker}</p>
-                          )}
-                          <div className="flex items-center gap-4 text-sm text-gray-600">
+                          <div className="flex items-start gap-3 mb-3">
+                            <div className="flex-1">
+                              <h3 className="text-gray-900 font-semibold text-lg mb-1">{session.title}</h3>
+                              {session.speaker && (
+                                <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+                                  <User className="w-4 h-4" />
+                                  <span>{session.speaker}</span>
+                                </div>
+                              )}
+                            </div>
+                            {session.topic && (
+                              <Badge variant="outline" className="text-xs whitespace-nowrap">
+                                {session.topic}
+                              </Badge>
+                            )}
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
                             {session.time && (
-                              <div className="flex items-center gap-1">
-                                <Clock className="w-4 h-4" />
-                                <span>{session.time}</span>
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <Clock className="w-4 h-4 text-[#0F6AB4]" />
+                                <span className="font-medium">{session.time}</span>
                               </div>
                             )}
                             {session.room && (
-                              <div className="flex items-center gap-1">
-                                <MapPin className="w-4 h-4" />
-                                <span>{session.room}</span>
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <MapPin className="w-4 h-4 text-[#0F6AB4]" />
+                                <span className="font-medium">{session.room}</span>
                               </div>
                             )}
-                            <span>{session.durationMin} min</span>
+                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                              <span className="font-medium">{session.durationMin || session.duration} minutes</span>
+                            </div>
                           </div>
+                          
                           {session.event && (
-                            <div className="mt-2">
+                            <div className="mt-3 pt-3 border-t border-gray-200">
                               <Badge variant="outline" className="text-xs">
                                 <Calendar className="w-3 h-3 inline mr-1" />
                                 {session.event.title}
@@ -583,11 +618,61 @@ export function RSVPPage({ userRole }: RSVPPageProps) {
             )}
           </TabsContent>
 
-          <TabsContent value="past" className="mt-6">
-            <div className="text-center py-12 text-gray-500">
-              <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>No past events yet</p>
-            </div>
+          <TabsContent value="past" className="space-y-3 mt-6">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+              </div>
+            ) : past.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p className="text-gray-900 font-medium">No past events</p>
+                <p className="text-sm mt-2 text-gray-600">Events you've attended will appear here</p>
+              </div>
+            ) : (
+              past.map((registration) => {
+                const event = registration.event;
+                return (
+                  <Card key={registration.id} className="hover:shadow-md transition-shadow opacity-75">
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <h3 className="text-gray-900 font-semibold">{event?.title || event?.name}</h3>
+                            <Badge className={`${getStatusColor(registration.status)} text-white`}>
+                              {getStatusDisplay(registration.status)}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              Past Event
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-3 gap-4 text-sm text-gray-600">
+                            <div className="flex items-center gap-2">
+                              <Calendar className="w-4 h-4" />
+                              <span>
+                                {event?.startDate ? new Date(event.startDate).toLocaleDateString() : 'TBD'}
+                                {event?.endDate && event.startDate !== event.endDate && 
+                                  ` - ${new Date(event.endDate).toLocaleDateString()}`
+                                }
+                              </span>
+                            </div>
+                            {event?.venue && (
+                              <div className="flex items-center gap-2">
+                                <MapPin className="w-4 h-4" />
+                                <span>{event.venue.name}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <span>Expected: {event?.expectedAudience || 0} attendees</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
           </TabsContent>
         </Tabs>
       </div>
