@@ -219,17 +219,22 @@ export function BudgetPage() {
   }, [] as { category: string; planned: number; actual: number }[]);
 
   function getCategoryColor(category: string): string {
-    const colors: Record<string, string> = {
-      'Venue': '#0F6AB4',
-      'Catering': '#28A9A1',
-      'Technology': '#8B5CF6',
-      'Audio/Visual': '#8B5CF6',
-      'Marketing': '#F9B233',
-      'Staff': '#10B981',
-      'Miscellaneous': '#6B7280',
-      'Other': '#6B7280',
-    };
-    return colors[category] || '#6B7280';
+    // Generate a consistent color based on category name hash
+    // This ensures the same category always gets the same color
+    if (!category) return '#6B7280';
+    
+    // Simple hash function to generate consistent colors
+    let hash = 0;
+    for (let i = 0; i < category.length; i++) {
+      hash = category.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    
+    // Generate a color from the hash (using HSL for better color distribution)
+    const hue = Math.abs(hash % 360);
+    const saturation = 60 + (Math.abs(hash) % 20); // 60-80% saturation
+    const lightness = 45 + (Math.abs(hash) % 15); // 45-60% lightness
+    
+    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
   }
 
   return (

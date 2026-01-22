@@ -13,6 +13,13 @@ export class AiService {
     budgetLkr?: number;
     tracks?: number;
     title?: string;
+    venueName?: string;
+    venueCapacity?: number;
+    startDate?: string;
+    endDate?: string;
+    budgetItems?: Array<{ description: string; amount: number }>;
+    rooms?: Array<{ name: string; capacity: number }>;
+    sessions?: Array<{ title: string; speaker?: string; roomName?: string; durationMin: number }>;
   }> {
     this.logger.log('Sending brief to AI service for parsing');
     try {
@@ -23,8 +30,15 @@ export class AiService {
         budgetLkr?: number; 
         tracks?: number;
         title?: string;
+        venueName?: string;
+        venueCapacity?: number;
+        startDate?: string;
+        endDate?: string;
+        budgetItems?: Array<{ description: string; amount: number }>;
+        rooms?: Array<{ name: string; capacity: number }>;
+        sessions?: Array<{ title: string; speaker?: string; roomName?: string; durationMin: number }>;
       };
-      this.logger.log(`AI parsed - estimatedAudience: ${data.estimatedAudience}, budgetLkr: ${data.budgetLkr}, title: ${data.title}`);
+      this.logger.log(`AI parsed - estimatedAudience: ${data.estimatedAudience}, budgetLkr: ${data.budgetLkr}, title: ${data.title}, venue: ${data.venueName}`);
       return data;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);

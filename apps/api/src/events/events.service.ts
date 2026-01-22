@@ -5,11 +5,15 @@ import { Event } from './event.entity';
 import { EventBudget } from './event-budget.entity';
 import { BudgetItem, BudgetItemStatus } from './budget-item.entity';
 import { Venue } from './venue.entity';
+import { Room } from '../rooms/room.entity';
+import { Session } from './session.entity';
 import { UsersService } from '../users/users.service';
 import { VenuesService } from '../venues/venues.service';
+import { SessionsService } from './sessions.service';
 import { CreateEventDto, BudgetItemDto } from './dto/create-event.dto';
 import { CreateBudgetItemDto } from './dto/create-budget-item.dto';
 import { UpdateBudgetItemDto } from './dto/update-budget-item.dto';
+import { CreateSessionDto } from './dto/create-session.dto';
 
 @Injectable()
 export class EventsService {
@@ -19,12 +23,15 @@ export class EventsService {
     @InjectRepository(Event) private eventRepo: Repository<Event>,
     @InjectRepository(EventBudget) private budgetRepo: Repository<EventBudget>,
     @InjectRepository(BudgetItem) private budgetItemRepo: Repository<BudgetItem>,
+    @InjectRepository(Room) private roomRepo: Repository<Room>,
+    @InjectRepository(Session) private sessionRepo: Repository<Session>,
     private users: UsersService,
     private venues: VenuesService,
+    private sessionsService: SessionsService,
     private dataSource: DataSource,
   ) {}
 
-  async create(dto: CreateEventDto) {
+  async create(dto: CreateEventDto, parsedData?: any, organizerId?: number) {
     this.logger.log(`Creating event with title: ${dto.title}`);
     this.logger.log(`Received venueId: ${dto.venueId}, expectedAudience: ${dto.expectedAudience}`);
     
@@ -107,24 +114,44 @@ export class EventsService {
 
       // Create budget and items
       let budgetItems: BudgetItemDto[] = dto.budgetItems || [];
-      
-      // If no budget items provided and we have a budget, generate heuristic items
-      if (budgetItems.length === 0 && dto.budget) {
-        const totalBudget = parseFloat(dto.budget);
-        budgetItems = this.generateHeuristicBudgetItems(totalBudget);
-      }
 
-      // Calculate total estimated
-      const totalEstimated = budgetItems.reduce(
-        (sum, item) => sum + parseFloat(item.estimatedAmount || '0') * (item.quantity || 1),
-        0,
-      ).toFixed(2);
+      // Calculate total estimated with proper validation
+      let totalEstimated = '0.00';
+      if (budgetItems.length > 0) {
+        const total = budgetItems.reduce(
+          (sum, item) => {
+            const amount = parseFloat(item.estimatedAmount || '0');
+            const quantity = item.quantity || 1;
+            const itemTotal = amount * quantity;
+            
+            // Validate the value is finite and not NaN
+            if (!isFinite(itemTotal) || isNaN(itemTotal)) {
+              this.logger.warn(`Invalid budget item amount: ${item.estimatedAmount}, quantity: ${quantity}`);
+              return sum;
+            }
+            
+            return sum + itemTotal;
+          },
+          0,
+        );
+        
+        // Validate total is within decimal(12,2) range (max: 9999999999.99)
+        const maxValue = 9999999999.99;
+        if (total > maxValue) {
+          this.logger.error(`Total estimated budget (${total}) exceeds maximum allowed value (${maxValue})`);
+          throw new BadRequestException(
+            `Total estimated budget exceeds maximum allowed value. Please reduce individual budget items.`
+          );
+        }
+        
+        totalEstimated = total.toFixed(2);
+      }
 
       // Create event budget
       const eventBudget = this.budgetRepo.create({
         event: savedEvent,
         totalEstimated: totalEstimated,
-        totalActual: '0',
+        totalActual: '0.00',
       });
       const savedBudget = await queryRunner.manager.save(EventBudget, eventBudget);
 
@@ -148,10 +175,38 @@ export class EventsService {
 
       await queryRunner.commitTransaction();
 
+      // After event creation, handle parsed data (rooms and sessions)
+      if (parsedData && organizerId) {
+        try {
+          // Create rooms if provided
+          let roomMap = new Map<string, Room>();
+          if (parsedData.rooms && parsedData.rooms.length > 0) {
+            roomMap = await this.findOrCreateRooms(
+              savedEvent.id,
+              organizerId,
+              parsedData.rooms
+            );
+          }
+          
+          // Create sessions if provided
+          if (parsedData.sessions && parsedData.sessions.length > 0) {
+            await this.createSessionsFromParsed(
+              savedEvent.id,
+              organizerId,
+              parsedData.sessions,
+              roomMap
+            );
+          }
+        } catch (error) {
+          this.logger.error(`Error creating rooms/sessions from parsed data: ${error}`);
+          // Don't fail event creation if rooms/sessions creation fails
+        }
+      }
+
       // Reload event with all relations
       const eventWithRelations = await this.eventRepo.findOne({
         where: { id: savedEvent.id },
-        relations: ['organizer', 'venue', 'eventBudget', 'eventBudget.items', 'attendees', 'attendees.user'],
+        relations: ['organizer', 'venue', 'eventBudget', 'eventBudget.items', 'attendees', 'attendees.user', 'rooms', 'sessions'],
       });
 
       this.logger.log(`Event created successfully with ID: ${savedEvent.id}`);
@@ -164,41 +219,6 @@ export class EventsService {
     } finally {
       await queryRunner.release();
     }
-  }
-
-  private generateHeuristicBudgetItems(totalBudget: number): BudgetItemDto[] {
-    // Heuristic split: venue 40%, catering 30%, AV 10%, misc 20%
-    const venueAmount = (totalBudget * 0.4).toFixed(2);
-    const cateringAmount = (totalBudget * 0.3).toFixed(2);
-    const avAmount = (totalBudget * 0.1).toFixed(2);
-    const miscAmount = (totalBudget * 0.2).toFixed(2);
-
-    return [
-      {
-        category: 'Venue',
-        description: 'Venue rental and facilities',
-        estimatedAmount: venueAmount,
-        quantity: 1,
-      },
-      {
-        category: 'Catering',
-        description: 'Food and beverages',
-        estimatedAmount: cateringAmount,
-        quantity: 1,
-      },
-      {
-        category: 'Audio/Visual',
-        description: 'AV equipment and technical support',
-        estimatedAmount: avAmount,
-        quantity: 1,
-      },
-      {
-        category: 'Miscellaneous',
-        description: 'Other expenses',
-        estimatedAmount: miscAmount,
-        quantity: 1,
-      },
-    ];
   }
 
   findAll(organizerId?: number) {
@@ -277,8 +297,8 @@ export class EventsService {
       this.logger.log(`Creating new event budget for event ${eventId}`);
       eventBudget = this.budgetRepo.create({
         event: event,
-        totalEstimated: '0',
-        totalActual: '0',
+        totalEstimated: '0.00',
+        totalActual: '0.00',
       });
       eventBudget = await this.budgetRepo.save(eventBudget);
     }
@@ -290,7 +310,7 @@ export class EventsService {
       category: dto.category,
       description: dto.description,
       estimatedAmount: dto.estimatedAmount,
-      actualAmount: dto.actualAmount || '0',
+      actualAmount: dto.actualAmount || '0.00',
       quantity: dto.quantity || 1,
       unit: dto.unit,
       vendor: dto.vendor,
@@ -413,22 +433,199 @@ export class EventsService {
       return;
     }
     
-    // Calculate totals from all items
+    // Calculate totals from all items with validation
     const totalEstimated = eventBudget.items.reduce(
-      (sum, item) => sum + parseFloat(item.estimatedAmount || '0') * (item.quantity || 1),
+      (sum, item) => {
+        const amount = parseFloat(item.estimatedAmount || '0');
+        const quantity = item.quantity || 1;
+        const itemTotal = amount * quantity;
+        
+        if (!isFinite(itemTotal) || isNaN(itemTotal)) {
+          this.logger.warn(`Invalid budget item amount: ${item.estimatedAmount}, quantity: ${quantity}`);
+          return sum;
+        }
+        
+        return sum + itemTotal;
+      },
       0,
-    ).toFixed(2);
+    );
     
     const totalActual = eventBudget.items.reduce(
-      (sum, item) => sum + parseFloat(item.actualAmount || '0'),
+      (sum, item) => {
+        const amount = parseFloat(item.actualAmount || '0');
+        
+        if (!isFinite(amount) || isNaN(amount)) {
+          this.logger.warn(`Invalid actual amount: ${item.actualAmount}`);
+          return sum;
+        }
+        
+        return sum + amount;
+      },
       0,
-    ).toFixed(2);
+    );
     
-    eventBudget.totalEstimated = totalEstimated;
-    eventBudget.totalActual = totalActual;
+    // Validate totals are within decimal(12,2) range
+    const maxValue = 9999999999.99;
+    if (totalEstimated > maxValue) {
+      this.logger.error(`Total estimated budget (${totalEstimated}) exceeds maximum allowed value (${maxValue})`);
+      throw new BadRequestException(
+        `Total estimated budget exceeds maximum allowed value. Please reduce individual budget items.`
+      );
+    }
+    
+    if (totalActual > maxValue) {
+      this.logger.error(`Total actual budget (${totalActual}) exceeds maximum allowed value (${maxValue})`);
+      throw new BadRequestException(
+        `Total actual budget exceeds maximum allowed value. Please reduce individual budget items.`
+      );
+    }
+    
+    eventBudget.totalEstimated = totalEstimated.toFixed(2);
+    eventBudget.totalActual = totalActual.toFixed(2);
     
     await this.budgetRepo.save(eventBudget);
     
     this.logger.log(`Budget totals recalculated: Estimated=${totalEstimated}, Actual=${totalActual}`);
+  }
+
+  /**
+   * Find or create a venue by name (case-insensitive matching).
+   * If venue doesn't exist, creates it with the provided details.
+   */
+  async findOrCreateVenue(
+    venueName: string,
+    organizerId: number,
+    capacity?: number,
+    address?: string
+  ): Promise<Venue> {
+    this.logger.log(`Finding or creating venue: ${venueName} for organizer ${organizerId}`);
+    
+    // Find existing venues for this organizer
+    const existingVenues = await this.venues.findAll(organizerId);
+    
+    // Case-insensitive search
+    const normalizedSearchName = venueName.toLowerCase().trim();
+    const existingVenue = existingVenues.find(
+      v => v.name.toLowerCase().trim() === normalizedSearchName
+    );
+    
+    if (existingVenue) {
+      this.logger.log(`Found existing venue: ${existingVenue.name} (ID: ${existingVenue.id})`);
+      return existingVenue;
+    }
+    
+    // Create new venue
+    this.logger.log(`Creating new venue: ${venueName}`);
+    const newVenue = await this.venues.create({
+      name: venueName,
+      address: address || venueName, // Use venue name as address if not provided
+      capacity: capacity || 100, // Default capacity
+    }, organizerId);
+    
+    this.logger.log(`Created new venue: ${newVenue.name} (ID: ${newVenue.id})`);
+    return newVenue;
+  }
+
+  /**
+   * Find or create rooms for an event (case-insensitive matching).
+   * Returns a map of room names to Room entities.
+   */
+  async findOrCreateRooms(
+    eventId: number,
+    organizerId: number,
+    roomData: Array<{ name: string; capacity: number }>
+  ): Promise<Map<string, Room>> {
+    this.logger.log(`Finding or creating ${roomData.length} rooms for event ${eventId}`);
+    
+    // Get existing rooms for this event
+    const existingRooms = await this.roomRepo.find({
+      where: { event: { id: eventId } },
+    });
+    
+    const roomMap = new Map<string, Room>();
+    const normalizedExistingRooms = new Map<string, Room>();
+    
+    // Create normalized map of existing rooms
+    for (const room of existingRooms) {
+      const normalizedName = room.name.toLowerCase().trim();
+      normalizedExistingRooms.set(normalizedName, room);
+    }
+    
+    // Find or create each room
+    for (const roomInfo of roomData) {
+      const normalizedName = roomInfo.name.toLowerCase().trim();
+      const existingRoom = normalizedExistingRooms.get(normalizedName);
+      
+      if (existingRoom) {
+        this.logger.log(`Found existing room: ${existingRoom.name} (ID: ${existingRoom.id})`);
+        roomMap.set(roomInfo.name, existingRoom);
+      } else {
+        // Create new room
+        const event = await this.eventRepo.findOne({ where: { id: eventId } });
+        if (!event) {
+          throw new NotFoundException(`Event with ID ${eventId} not found`);
+        }
+        
+        const newRoom = this.roomRepo.create({
+          event,
+          name: roomInfo.name,
+          capacity: roomInfo.capacity,
+        });
+        
+        const savedRoom = await this.roomRepo.save(newRoom);
+        this.logger.log(`Created new room: ${savedRoom.name} (ID: ${savedRoom.id})`);
+        roomMap.set(roomInfo.name, savedRoom);
+      }
+    }
+    
+    return roomMap;
+  }
+
+  /**
+   * Create sessions from parsed session data after event and rooms are created.
+   */
+  async createSessionsFromParsed(
+    eventId: number,
+    organizerId: number,
+    sessions: Array<{ title: string; speaker?: string; roomName?: string; durationMin: number }>,
+    roomMap: Map<string, Room>
+  ): Promise<Session[]> {
+    this.logger.log(`Creating ${sessions.length} sessions for event ${eventId}`);
+    
+    const createdSessions: Session[] = [];
+    
+    for (const sessionData of sessions) {
+      // Find room if specified
+      let room: Room | null = null;
+      if (sessionData.roomName) {
+        room = roomMap.get(sessionData.roomName) || null;
+        if (!room) {
+          this.logger.warn(`Room "${sessionData.roomName}" not found for session "${sessionData.title}", creating without room`);
+        }
+      }
+      
+      // Create session DTO
+      const sessionDto: CreateSessionDto = {
+        title: sessionData.title,
+        speaker: sessionData.speaker || undefined,
+        durationMin: sessionData.durationMin || 60,
+        topic: 'General', // Default topic
+        capacity: 0, // Default capacity
+        roomId: room?.id || undefined,
+      };
+      
+      try {
+        const createdSession = await this.sessionsService.create(eventId, sessionDto, organizerId);
+        if (createdSession && createdSession.id) {
+          createdSessions.push(createdSession);
+          this.logger.log(`Created session: ${createdSession.title} (ID: ${createdSession.id})`);
+        }
+      } catch (error) {
+        this.logger.error(`Failed to create session "${sessionData.title}": ${error}`);
+        // Continue with other sessions
+      }
+    }
+    
+    return createdSessions;
   }
 }

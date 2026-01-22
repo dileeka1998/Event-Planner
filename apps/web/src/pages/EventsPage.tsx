@@ -69,6 +69,9 @@ export function EventsPage({ onNavigate }: EventsPageProps = {}) {
   const [isParsing, setIsParsing] = useState(false);
   const [isAddVenueOpen, setIsAddVenueOpen] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
+  const [parsedData, setParsedData] = useState<any>(null);
+  const [previewData, setPreviewData] = useState<any>(null);
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
@@ -226,15 +229,24 @@ export function EventsPage({ onNavigate }: EventsPageProps = {}) {
     setIsParsing(true);
     try {
       const { data } = await parseBrief({ text: aiInput });
-      setShowAIResult(true);
-      setEventDetails({
-        ...eventDetails,
-        brief: aiInput,
-        name: data.title || eventDetails.name,
-        expectedAudience: data.estimatedAudience?.toString() || eventDetails.expectedAudience,
-        budget: data.budgetLkr?.toString() || eventDetails.budget,
+      setParsedData(data);
+      
+      // Initialize preview data with parsed data
+      setPreviewData({
+        title: data.title || '',
+        startDate: data.startDate || '',
+        endDate: data.endDate || '',
+        expectedAudience: data.estimatedAudience || 0,
+        budget: data.budgetLkr || 0,
+        venueName: data.venueName || '',
+        venueCapacity: data.venueCapacity || data.estimatedAudience || 0,
+        budgetItems: data.budgetItems || [],
+        rooms: data.rooms || [],
+        sessions: data.sessions || [],
       });
-      toast.success('AI suggestions applied successfully!');
+      
+      setShowPreviewDialog(true);
+      toast.success('AI parsing completed! Review and edit the details.');
     } catch (error: any) {
       toast.error('AI parsing failed. Please try again.');
       console.error(error);
@@ -283,6 +295,80 @@ export function EventsPage({ onNavigate }: EventsPageProps = {}) {
       toast.success('Venue added and selected!');
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Failed to create venue');
+    }
+  };
+
+  const handleCreateEventFromPreview = async () => {
+    const userId = getUserId();
+    if (!userId) {
+      toast.error('Please login to create events');
+      return;
+    }
+
+    if (!previewData || !previewData.title || !previewData.startDate || !previewData.endDate) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    // Validate that start date is not in the past
+    const startDate = new Date(previewData.startDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    startDate.setHours(0, 0, 0, 0);
+    
+    if (startDate < today) {
+      toast.error('Start date cannot be in the past');
+      return;
+    }
+
+    // Validate that start date is not after end date
+    const endDate = new Date(previewData.endDate);
+    if (startDate > endDate) {
+      toast.error('Start date cannot be after end date');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Prepare budget items for API
+      const budgetItems = previewData.budgetItems?.map((item: any) => ({
+        category: 'Other',
+        description: item.description,
+        estimatedAmount: String(item.amount),
+        quantity: 1,
+      })) || [];
+
+      // Reconstruct brief with updated preview data for backend parsing
+      // The backend will parse the brief and use the parsed data
+      const updatedBrief = aiInput; // Use original brief - backend will parse it
+      
+      await createEvent({
+        organizerId: userId,
+        title: previewData.title,
+        startDate: previewData.startDate,
+        endDate: previewData.endDate,
+        expectedAudience: previewData.expectedAudience || undefined,
+        budget: previewData.budget ? String(previewData.budget) : undefined,
+        venueId: selectedVenue?.id, // Venue will be created/validated by backend if venueName is in brief
+        brief: updatedBrief, // Include the original brief for backend parsing
+        budgetItems: budgetItems.length > 0 ? budgetItems : undefined,
+      });
+      
+      // Close preview dialog and reset
+      setShowPreviewDialog(false);
+      setPreviewData(null);
+      setParsedData(null);
+      setAiInput('');
+      setSelectedVenue(null);
+      
+      // Refresh events list
+      await fetchEvents();
+      toast.success('Event created successfully!');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to create event');
+      console.error(error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -640,6 +726,199 @@ export function EventsPage({ onNavigate }: EventsPageProps = {}) {
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Preview Dialog for AI Parsed Data */}
+        <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Review & Edit Event Details</DialogTitle>
+            </DialogHeader>
+            
+            {previewData && (
+              <div className="space-y-6 py-4">
+                {/* Basic Info */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Basic Information</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Event Name *</Label>
+                      <Input
+                        value={previewData.title}
+                        onChange={(e) => setPreviewData({...previewData, title: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <Label>Expected Audience</Label>
+                      <Input
+                        type="number"
+                        value={previewData.expectedAudience}
+                        onChange={(e) => setPreviewData({...previewData, expectedAudience: parseInt(e.target.value) || 0})}
+                      />
+                    </div>
+                    <div>
+                      <Label>Start Date *</Label>
+                      <Input
+                        type="date"
+                        value={previewData.startDate}
+                        onChange={(e) => setPreviewData({...previewData, startDate: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <Label>End Date *</Label>
+                      <Input
+                        type="date"
+                        value={previewData.endDate}
+                        onChange={(e) => setPreviewData({...previewData, endDate: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <Label>Budget (LKR)</Label>
+                      <Input
+                        type="number"
+                        value={previewData.budget}
+                        onChange={(e) => setPreviewData({...previewData, budget: parseInt(e.target.value) || 0})}
+                      />
+                    </div>
+                    <div>
+                      <Label>Venue Name</Label>
+                      <Input
+                        value={previewData.venueName}
+                        onChange={(e) => setPreviewData({...previewData, venueName: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <Label>Venue Capacity</Label>
+                      <Input
+                        type="number"
+                        value={previewData.venueCapacity}
+                        onChange={(e) => setPreviewData({...previewData, venueCapacity: parseInt(e.target.value) || 0})}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Budget Items */}
+                {previewData.budgetItems && previewData.budgetItems.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Budget Items</h3>
+                    <div className="space-y-2 max-h-48 overflow-y-auto border rounded p-3">
+                      {previewData.budgetItems.map((item: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                          <div className="flex-1">
+                            <span className="font-medium">{item.description}</span>
+                            <span className="text-gray-600 ml-2">LKR {item.amount.toLocaleString()}</span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const newItems = [...previewData.budgetItems];
+                              newItems.splice(idx, 1);
+                              setPreviewData({...previewData, budgetItems: newItems});
+                            }}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Rooms */}
+                {previewData.rooms && previewData.rooms.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Rooms</h3>
+                    <div className="space-y-2 max-h-48 overflow-y-auto border rounded p-3">
+                      {previewData.rooms.map((room: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                          <div className="flex-1">
+                            <span className="font-medium">{room.name}</span>
+                            <span className="text-gray-600 ml-2">Capacity: {room.capacity}</span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const newRooms = [...previewData.rooms];
+                              newRooms.splice(idx, 1);
+                              setPreviewData({...previewData, rooms: newRooms});
+                            }}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sessions */}
+                {previewData.sessions && previewData.sessions.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Sessions</h3>
+                    <div className="space-y-2 max-h-64 overflow-y-auto border rounded p-3">
+                      {previewData.sessions.map((session: any, idx: number) => (
+                        <div key={idx} className="p-3 bg-gray-50 rounded">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="font-medium">{session.title}</div>
+                              {session.speaker && <div className="text-sm text-gray-600">Speaker: {session.speaker}</div>}
+                              {session.roomName && <div className="text-sm text-gray-600">Room: {session.roomName}</div>}
+                              <div className="text-sm text-gray-600">Duration: {session.durationMin} min</div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const newSessions = [...previewData.sessions];
+                                newSessions.splice(idx, 1);
+                                setPreviewData({...previewData, sessions: newSessions});
+                              }}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowPreviewDialog(false);
+                      setPreviewData(null);
+                      setParsedData(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleCreateEventFromPreview}
+                    disabled={loading}
+                    className="bg-[#0F6AB4] hover:bg-[#0D5A9A]"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        Create Event
+                        <ArrowRight className="w-4 h-4 ml-2" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </div>

@@ -17,7 +17,7 @@ export function BudgetLineTable({ items, onAddItem, onUpdateItem, onDeleteItem }
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newItem, setNewItem] = useState<Omit<BudgetLineItem, 'id'>>({
-    category: 'Other',
+    category: '',
     description: '',
     quantity: 1,
     unit: 'item',
@@ -85,19 +85,12 @@ export function BudgetLineTable({ items, onAddItem, onUpdateItem, onDeleteItem }
             {isAdding && (
               <tr className="border-b border-gray-200 bg-blue-50">
                 <td className="p-2">
-                  <Select value={newItem.category} onValueChange={(value: any) => setNewItem({ ...newItem, category: value })}>
-                    <SelectTrigger className="bg-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Venue">Venue</SelectItem>
-                      <SelectItem value="Catering">Catering</SelectItem>
-                      <SelectItem value="Technology">Technology</SelectItem>
-                      <SelectItem value="Marketing">Marketing</SelectItem>
-                      <SelectItem value="Staff">Staff</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Input 
+                    value={newItem.category} 
+                    onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
+                    placeholder="Category"
+                    className="bg-white"
+                  />
                 </td>
                 <td className="p-2">
                   <Input 
