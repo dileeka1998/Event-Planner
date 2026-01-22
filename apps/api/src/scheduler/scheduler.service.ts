@@ -21,10 +21,10 @@ export class SchedulerService {
   async generateSchedule(eventId: number, organizerId: number, gapMinutes: number = 0, dryRun: boolean = false, startTime?: string) {
     this.logger.log(`Generating schedule for event ${eventId} by organizer ${organizerId} with gap time: ${gapMinutes} minutes (dryRun: ${dryRun})`);
 
-    // Fetch event with relations
+    // Fetch event with relations (including session rooms)
     const event = await this.eventRepo.findOne({
       where: { id: eventId },
-      relations: ['organizer', 'sessions', 'rooms'],
+      relations: ['organizer', 'sessions', 'sessions.room', 'rooms'],
     });
 
     if (!event) {
@@ -59,6 +59,7 @@ export class SchedulerService {
         durationMin: s.durationMin,
         topic: s.topic,
         capacity: s.capacity,
+        roomId: s.room?.id || null,  // Include user-provided room assignment (or null for whole venue)
       })),
       rooms: event.rooms.map((r) => ({
         id: r.id,
