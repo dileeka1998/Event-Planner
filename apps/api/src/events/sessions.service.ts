@@ -210,6 +210,83 @@ export class SessionsService {
       session.capacity = dto.capacity;
     }
 
+    // Validate time conflicts before saving
+    // Check if startTime or roomId was updated, or if durationMin was updated
+    const timeOrRoomUpdated = dto.startTime !== undefined || dto.roomId !== undefined || dto.durationMin !== undefined;
+    
+    if (timeOrRoomUpdated && session.startTime) {
+      // Get the final values (may have been updated above)
+      const finalStartTime = session.startTime;
+      const finalDuration = session.durationMin;
+      const finalRoomId = session.room?.id || null;
+      
+      // Load all other sessions for this event to check conflicts
+      const allSessions = await this.sessionRepo.find({
+        where: { event: { id: eventId } },
+        relations: ['room'],
+      });
+      
+      // Calculate session end time
+      const sessionEndTime = new Date(finalStartTime);
+      sessionEndTime.setMinutes(sessionEndTime.getMinutes() + finalDuration);
+      
+      // Default gap time (0 minutes) - can be made configurable if needed
+      const gapMinutes = 0;
+      const gapMs = gapMinutes * 60 * 1000;
+      
+      // Check for conflicts
+      for (const otherSession of allSessions) {
+        // Skip the session being updated
+        if (otherSession.id === sessionId) {
+          continue;
+        }
+        
+        // Skip if other session has no start time
+        if (!otherSession.startTime) {
+          continue;
+        }
+        
+        const otherStartTime = new Date(otherSession.startTime);
+        const otherEndTime = new Date(otherStartTime);
+        otherEndTime.setMinutes(otherEndTime.getMinutes() + otherSession.durationMin);
+        const otherRoomId = otherSession.room?.id || null;
+        
+        // Check if sessions overlap (accounting for gap time)
+        const sessionsOverlap = !(
+          sessionEndTime.getTime() + gapMs <= otherStartTime.getTime() ||
+          otherEndTime.getTime() + gapMs <= finalStartTime.getTime()
+        );
+        
+        if (sessionsOverlap) {
+          // Check conflict type
+          const conflictData: any = {
+            sessionId: session.id,
+            conflictingSessionId: otherSession.id,
+            sessionTitle: session.title,
+            conflictingSessionTitle: otherSession.title,
+          };
+          
+          if (finalRoomId === null && otherRoomId === null) {
+            // Both are whole venue - conflict!
+            conflictData.conflictType = 'whole_venue';
+          } else if (finalRoomId === null || otherRoomId === null) {
+            // One is whole venue, one is roomed - conflict!
+            conflictData.conflictType = 'whole_venue';
+          } else if (finalRoomId === otherRoomId) {
+            // Same room - conflict!
+            conflictData.conflictType = 'same_room';
+            conflictData.roomName = session.room?.name || 'Unknown';
+          }
+          
+          // Throw error with conflict data in response
+          throw new BadRequestException({
+            message: `Session "${session.title}" conflicts with another session.`,
+            conflictData: conflictData,
+          });
+        }
+      }
+    }
+
     const updatedSession = await this.sessionRepo.save(session);
     this.logger.log(`Session ${sessionId} updated successfully`);
 
@@ -250,4 +327,5 @@ export class SessionsService {
 
     return { message: 'Session deleted successfully' };
   }
+
 }

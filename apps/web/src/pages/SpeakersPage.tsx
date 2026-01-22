@@ -30,6 +30,7 @@ export function SpeakersPage() {
     topic: 'General',
     capacity: 0,
   });
+  const [conflictedSessionIds, setConflictedSessionIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     fetchEvents();
@@ -85,6 +86,7 @@ export function SpeakersPage() {
     try {
       const { data } = await getEventSessions(eventId);
       setSessions(data);
+      setConflictedSessionIds(new Set()); // Clear conflicts when sessions are fetched
     } catch (error: any) {
       toast.error('Failed to fetch sessions');
       console.error(error);
@@ -164,6 +166,7 @@ export function SpeakersPage() {
     if (open === false || open === undefined) {
       setIsDialogOpen(false);
       setEditingSession(null);
+      setConflictedSessionIds(new Set()); // Clear conflicts when dialog closes
       // Pre-fill start time with event's start date if available
       let defaultStartTime = '';
       if (selectedEventId) {
@@ -265,6 +268,7 @@ export function SpeakersPage() {
       if (editingSession) {
         await updateSession(selectedEventId, editingSession.id, sessionData);
         toast.success('Session updated successfully');
+        setConflictedSessionIds(new Set()); // Clear conflicts on success
       } else {
         await createSession(selectedEventId, sessionData);
         toast.success('Session created successfully');
@@ -276,7 +280,17 @@ export function SpeakersPage() {
         await fetchEventRooms(selectedEventId); // Refresh rooms list after session creation/update
       }
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to save session');
+      const errorResponse = error?.response?.data;
+      const errorMessage = errorResponse?.message || errorResponse || 'Failed to save session';
+      toast.error(errorMessage);
+      
+      // Extract conflict data if available
+      const conflictData = errorResponse?.conflictData;
+      if (conflictData) {
+        const conflictedIds = new Set<number>([conflictData.sessionId, conflictData.conflictingSessionId]);
+        setConflictedSessionIds(conflictedIds);
+      }
+      
       console.error(error);
     }
   };
@@ -655,8 +669,13 @@ export function SpeakersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sessions.map((session) => (
-                  <TableRow key={session.id}>
+                {sessions.map((session) => {
+                  const isConflicted = conflictedSessionIds.has(session.id);
+                  return (
+                  <TableRow 
+                    key={session.id}
+                    className={isConflicted ? 'bg-red-50 border-red-200 border-2' : ''}
+                  >
                     <TableCell className="font-medium">{session.title}</TableCell>
                     <TableCell>{session.speaker || '-'}</TableCell>
                     <TableCell>
@@ -710,7 +729,8 @@ export function SpeakersPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           )}

@@ -336,6 +336,7 @@ class Session(BaseModel):
     durationMin: int
     topic: str
     capacity: int
+    roomId: Optional[int] = None  # User-provided room assignment (or None if whole venue)
 
 
 class ScheduleEventRequest(BaseModel):
@@ -399,10 +400,352 @@ def generate_time_slots(start_date: str, end_date: str, slot_duration_minutes: i
     return slots
 
 
+# ============================================================================
+# Scheduler Helper Functions 
+# ============================================================================
+
+def create_interval_variables(
+    model: cp_model.CpModel,
+    num_sessions: int,
+    num_slots: int,
+    session_slot_durations: List[int]
+) -> Tuple[List[cp_model.IntVar], List[cp_model.IntervalVar]]:
+    """
+    Create interval variables for each session with proper start, size, and end variables.
+    Always schedules time slots (never preserves existing times).
+    
+    Returns:
+        Tuple of (start_vars, interval_vars) where:
+        - start_vars[i] is the start slot index for session i
+        - interval_vars[i] is the interval variable for session i
+    """
+    start_vars = [
+        model.NewIntVar(0, num_slots - 1, f'start_{i}') 
+        for i in range(num_sessions)
+    ]
+    
+    interval_vars = []
+    for i in range(num_sessions):
+        # Create end variable
+        end_var = model.NewIntVar(0, num_slots, f'end_{i}')
+        model.Add(end_var == start_vars[i] + session_slot_durations[i])
+        
+        # Create interval variable with start, size, and end
+        interval_var = model.NewIntervalVar(
+            start_vars[i],
+            session_slot_durations[i],
+            end_var,
+            f'session_{i}_interval'
+        )
+        interval_vars.append(interval_var)
+    
+    return start_vars, interval_vars
+
+
+def get_room_indices_for_sessions(
+    sessions: List[Session],
+    rooms: List[Room]
+) -> List[Optional[int]]:
+    """
+    Get room index for each session based on user-provided roomId.
+    Returns None if session has no room (whole venue case).
+    
+    Returns:
+        List where room_indices[i] is the room index if session i has a room, None otherwise
+    """
+    room_indices = []
+    for session in sessions:
+        room_idx = None
+        if session.roomId is not None:
+            # Find the room index in the rooms list
+            for r_idx, room in enumerate(rooms):
+                if room.id == session.roomId:
+                    room_idx = r_idx
+                    break
+        room_indices.append(room_idx)
+    return room_indices
+
+
+def add_room_no_overlap_constraints(
+    model: cp_model.CpModel,
+    num_sessions: int,
+    num_rooms: int,
+    start_vars: List[cp_model.IntVar],
+    interval_vars: List[cp_model.IntervalVar],
+    room_indices: List[Optional[int]],
+    session_slot_durations: List[int],
+    gap_slots: int,
+    num_slots: int
+) -> None:
+    """
+    Add no-overlap constraints per room using AddNoOverlap.
+    Sessions in the same room cannot overlap (with gap time).
+    """
+    for r_idx in range(num_rooms):
+        # Collect intervals of sessions assigned to this room
+        room_intervals = []
+        
+        for i in range(num_sessions):
+            if room_indices[i] == r_idx:
+                # Session is in this room - add interval with gap
+                if gap_slots > 0:
+                    # Create extended interval that includes gap time
+                    extended_size = session_slot_durations[i] + gap_slots
+                    extended_end = model.NewIntVar(0, num_slots, f'extended_end_{i}_room_{r_idx}')
+                    model.Add(extended_end == start_vars[i] + extended_size)
+                    
+                    extended_interval = model.NewIntervalVar(
+                        start_vars[i],
+                        extended_size,
+                        extended_end,
+                        f'extended_session_{i}_room_{r_idx}'
+                    )
+                    room_intervals.append(extended_interval)
+                else:
+                    # No gap, use original interval
+                    room_intervals.append(interval_vars[i])
+        
+        # Add no-overlap constraint for this room
+        if room_intervals:
+            model.AddNoOverlap(room_intervals)
+
+
+def add_speaker_no_overlap_constraints(
+    model: cp_model.CpModel,
+    num_sessions: int,
+    sessions: List[Session],
+    interval_vars: List[cp_model.IntervalVar]
+) -> None:
+    """
+    Add no-overlap constraints for speakers.
+    Sessions with the same speaker cannot overlap.
+    """
+    # Group sessions by speaker
+    speaker_sessions: Dict[str, List[int]] = {}
+    for i, session in enumerate(sessions):
+        if session.speaker:
+            speaker = session.speaker.strip()
+            if speaker:
+                if speaker not in speaker_sessions:
+                    speaker_sessions[speaker] = []
+                speaker_sessions[speaker].append(i)
+    
+    # Add no-overlap constraint for each speaker's sessions
+    for speaker, session_indices in speaker_sessions.items():
+        if len(session_indices) > 1:
+            speaker_intervals = [interval_vars[i] for i in session_indices]
+            model.AddNoOverlap(speaker_intervals)
+
+
+def add_whole_venue_no_overlap_constraints(
+    model: cp_model.CpModel,
+    num_sessions: int,
+    room_indices: List[Optional[int]],
+    start_vars: List[cp_model.IntVar],
+    interval_vars: List[cp_model.IntervalVar],
+    session_slot_durations: List[int],
+    gap_slots: int,
+    num_slots: int
+) -> None:
+    """
+    Add no-overlap constraints for whole venue sessions.
+    Sessions without rooms (whole venue) cannot overlap with ANY other session.
+    Gap time is respected between whole venue sessions and all other sessions.
+    Uses interval variables with AddNoOverlap for efficiency.
+    """
+    # Find all sessions without rooms (whole venue)
+    whole_venue_sessions = [i for i in range(num_sessions) if room_indices[i] is None]
+    
+    if not whole_venue_sessions:
+        return
+    
+    # Create extended intervals for whole venue sessions (with gap)
+    whole_venue_intervals = []
+    for i in whole_venue_sessions:
+        if gap_slots > 0:
+            # Create extended interval that includes gap time
+            extended_size = session_slot_durations[i] + gap_slots
+            extended_end = model.NewIntVar(0, num_slots, f'extended_end_whole_venue_{i}')
+            model.Add(extended_end == start_vars[i] + extended_size)
+            
+            extended_interval = model.NewIntervalVar(
+                start_vars[i],
+                extended_size,
+                extended_end,
+                f'extended_whole_venue_{i}'
+            )
+            whole_venue_intervals.append(extended_interval)
+        else:
+            # No gap, use original interval
+            whole_venue_intervals.append(interval_vars[i])
+    
+    # Whole venue sessions cannot overlap with each other
+    if len(whole_venue_intervals) > 1:
+        model.AddNoOverlap(whole_venue_intervals)
+    
+    # Create a mapping from session index to its extended interval
+    whole_venue_interval_map = {}
+    for idx, i in enumerate(whole_venue_sessions):
+        whole_venue_interval_map[i] = whole_venue_intervals[idx]
+    
+    # For each whole venue session, ensure it doesn't overlap with any roomed session
+    # We need to check against each roomed session individually
+    for i in whole_venue_sessions:
+        # Check against each roomed session
+        for j in range(num_sessions):
+            if room_indices[j] is not None:  # Roomed session
+                # Create a constraint that whole venue session i and roomed session j don't overlap
+                # Use boolean constraints for this specific pair
+                i_before_j = model.NewBoolVar(f'whole_venue_{i}_before_roomed_{j}')
+                j_before_i = model.NewBoolVar(f'roomed_{j}_before_whole_venue_{i}')
+                
+                # i ends + gap before j starts
+                i_end_plus_gap = model.NewIntVar(0, num_slots, f'i_end_plus_gap_{i}_{j}')
+                model.Add(i_end_plus_gap == start_vars[i] + session_slot_durations[i] + gap_slots)
+                
+                model.Add(start_vars[j] >= i_end_plus_gap).OnlyEnforceIf(i_before_j)
+                model.Add(start_vars[j] < i_end_plus_gap).OnlyEnforceIf(i_before_j.Not())
+                
+                # j ends + gap before i starts
+                j_end_plus_gap = model.NewIntVar(0, num_slots, f'j_end_plus_gap_{i}_{j}')
+                model.Add(j_end_plus_gap == start_vars[j] + session_slot_durations[j] + gap_slots)
+                
+                model.Add(start_vars[i] >= j_end_plus_gap).OnlyEnforceIf(j_before_i)
+                model.Add(start_vars[i] < j_end_plus_gap).OnlyEnforceIf(j_before_i.Not())
+                
+                # At least one must be true (ensures no overlap with gap)
+                model.AddBoolOr([i_before_j, j_before_i])
+
+
+def add_temporal_constraints(
+    model: cp_model.CpModel,
+    num_sessions: int,
+    num_slots: int,
+    start_vars: List[cp_model.IntVar],
+    session_slot_durations: List[int]
+) -> None:
+    """
+    Extract temporal constraints (fit within time slots) into separate function.
+    """
+    for i in range(num_sessions):
+        # Session must fit within time slots (end time <= last slot)
+        model.Add(start_vars[i] + session_slot_durations[i] <= num_slots)
+
+
+def create_objective_function(
+    model: cp_model.CpModel,
+    num_sessions: int,
+    num_slots: int,
+    start_vars: List[cp_model.IntVar],
+    sessions: List[Session]
+) -> None:
+    """
+    Extract objective function creation (minimize max slot) into separate function.
+    Preserves topic grouping logic.
+    """
+    # Calculate max and min slot indices
+    max_slot = model.NewIntVar(0, num_slots - 1, 'max_slot')
+    min_slot = model.NewIntVar(0, num_slots - 1, 'min_slot')
+    
+    for i in range(num_sessions):
+        model.Add(max_slot >= start_vars[i])
+        model.Add(min_slot <= start_vars[i])
+    
+    schedule_span = model.NewIntVar(0, num_slots - 1, 'schedule_span')
+    model.Add(schedule_span == max_slot - min_slot)
+    
+    # Topic grouping penalty (minimize distance between sessions with same topic)
+    topic_penalty = []
+    for i in range(num_sessions):
+        for j in range(i + 1, num_sessions):
+            if sessions[i].topic == sessions[j].topic:
+                # Penalty is the absolute difference in slot assignments
+                diff = model.NewIntVar(0, num_slots, f'topic_diff_{i}_{j}')
+                model.AddAbsEquality(diff, start_vars[i] - start_vars[j])
+                topic_penalty.append(diff)
+    
+    # Objective: Minimize max slot (spreads sessions out across time)
+    # This ensures sessions are distributed across different time slots
+    # Topic grouping is handled implicitly by the solver when there are multiple optimal solutions
+    model.Minimize(max_slot)
+
+
+def extract_solution(
+    solver: cp_model.CpSolver,
+    num_sessions: int,
+    start_vars: List[cp_model.IntVar],
+    sessions: List[Session],
+    rooms: List[Room],
+    time_slots: List[datetime],
+    room_indices: List[Optional[int]]
+) -> List[ScheduleAssignment]:
+    """
+    Extract solution and format assignments.
+    Preserves user-provided room assignments, schedules time slots.
+    """
+    assignments = []
+    slot_usage = {}  # Track which slots are used
+    room_usage = {}  # Track which rooms are used
+    
+    for i, session in enumerate(sessions):
+        slot_idx = solver.Value(start_vars[i])
+        room_idx = room_indices[i]
+        
+        # Debug logging
+        has_room = room_idx is not None
+        print(f"Session {session.id} ({session.title}): room_idx={room_idx}, slot_idx={slot_idx}, has_room={has_room}")
+        
+        room_id = session.roomId  # Preserve user-provided room assignment
+        if room_id is not None:
+            if room_id not in room_usage:
+                room_usage[room_id] = []
+            room_usage[room_id].append(session.id)
+            room_name = next((r.name for r in rooms if r.id == room_id), "Unknown")
+            print(f"  -> Room: {room_id} ({room_name}) [USER PROVIDED]")
+        else:
+            print(f"  -> Room: None (Whole Venue)")
+        
+        # Get start time from slot
+        start_time = None
+        if slot_idx < len(time_slots):
+            start_time = time_slots[slot_idx].isoformat()
+            if slot_idx not in slot_usage:
+                slot_usage[slot_idx] = []
+            slot_usage[slot_idx].append(session.id)
+            print(f"  -> Scheduled to slot {slot_idx} ({start_time})")
+        else:
+            print(f"  -> WARNING: Invalid slot index {slot_idx}")
+        
+        assignments.append(ScheduleAssignment(
+            sessionId=session.id,
+            roomId=room_id,
+            startTime=start_time
+        ))
+    
+    # Log conflicts
+    print(f"\nSlot usage summary:")
+    for slot_idx, session_ids in sorted(slot_usage.items()):
+        if len(session_ids) > 1:
+            print(f"  WARNING: Slot {slot_idx} has {len(session_ids)} sessions: {session_ids}")
+        else:
+            print(f"  Slot {slot_idx}: {session_ids[0]}")
+    
+    print(f"\nRoom usage summary:")
+    for room_id, session_ids in sorted(room_usage.items()):
+        print(f"  Room {room_id}: {len(session_ids)} sessions: {session_ids}")
+    
+    return assignments
+
+
 @app.post("/schedule-event", response_model=ScheduleEventResponse)
 def schedule_event(request: ScheduleEventRequest):
     """
-    Schedule sessions to rooms and time slots using OR Tools constraint programming.
+    Schedule time slots for sessions using OR Tools constraint programming.
+    - Never schedules rooms (uses user-provided room assignments)
+    - Always schedules time slots (never preserves existing start times)
+    - Prevents room conflicts (sessions in same room can't overlap)
+    - Prevents speaker conflicts (same speaker can't have overlapping sessions)
+    - Handles whole venue case (sessions without rooms can't overlap with ANY session)
     """
     try:
         if not request.sessions:
@@ -437,13 +780,6 @@ def schedule_event(request: ScheduleEventRequest):
         num_rooms = len(request.rooms)
         num_slots = len(time_slots)
         
-        # Decision variables: room[i] = room assigned to session i (None = no room)
-        # Using -1 to represent "no room assigned"
-        room_vars = [model.NewIntVar(-1, num_rooms - 1, f'room_{i}') for i in range(num_sessions)]
-        
-        # Decision variables: slot[i] = time slot assigned to session i
-        slot_vars = [model.NewIntVar(0, num_slots - 1, f'slot_{i}') for i in range(num_sessions)]
-        
         # Helper: session duration in slots (e.g., 60 min = 12 slots of 5 min)
         session_slot_durations = [
             max(1, (s.durationMin + slot_duration_minutes - 1) // slot_duration_minutes) for s in request.sessions
@@ -452,111 +788,50 @@ def schedule_event(request: ScheduleEventRequest):
         # Convert gap time to slots (round up)
         gap_slots = max(0, (request.gapMinutes + slot_duration_minutes - 1) // slot_duration_minutes) if request.gapMinutes else 0
         
-        # Constraint 1: Room capacity >= session capacity (if room assigned)
-        # Filter valid rooms for each session (rooms with sufficient capacity)
-        valid_rooms_per_session = []
+        # Step 1: Get room indices for each session (user-provided room assignments)
+        room_indices = get_room_indices_for_sessions(request.sessions, request.rooms)
+        
+        # Debug: Log room assignments
+        print(f"\nRoom assignments from user:")
         for i, session in enumerate(request.sessions):
-            valid_rooms = [r_idx for r_idx, room in enumerate(request.rooms) 
-                          if room.capacity >= session.capacity]
-            valid_rooms_per_session.append(valid_rooms)
-            # If no valid rooms, session can't be assigned (room_vars[i] = -1)
-            if not valid_rooms:
-                model.Add(room_vars[i] == -1)
-            else:
-                # Session can only be assigned to valid rooms or -1 (no room)
-                # Use AddMemberConstraint to restrict room_vars[i] to valid_rooms + [-1]
-                valid_options = valid_rooms + [-1]
-                # Create a constraint that room_vars[i] must be in valid_options
-                # We'll use AddMemberConstraint or create boolean variables
-                for r_idx in range(num_rooms):
-                    if r_idx not in valid_rooms:
-                        # If room is not valid, room_vars[i] cannot equal r_idx
-                        model.Add(room_vars[i] != r_idx)
+            room_idx = room_indices[i]
+            room_name = "None (Whole Venue)"
+            if room_idx is not None and room_idx < len(request.rooms):
+                room_name = request.rooms[room_idx].name
+            print(f"  Session {session.id} ({session.title}): roomId={session.roomId}, room_idx={room_idx}, room_name={room_name}")
         
-        # Constraint 2: No overlapping sessions in the same room
-        # Use a simpler approach: for each room, ensure no overlaps
-        for r_idx in range(num_rooms):
-            # Get all sessions that could be assigned to this room
-            sessions_in_room = []
-            for i in range(num_sessions):
-                # Check if session i can be assigned to room r_idx (has valid capacity)
-                if r_idx in valid_rooms_per_session[i]:
-                    # Create boolean: session i is in room r_idx
-                    in_room = model.NewBoolVar(f'session_{i}_in_room_{r_idx}')
-                    model.Add(room_vars[i] == r_idx).OnlyEnforceIf(in_room)
-                    model.Add(room_vars[i] != r_idx).OnlyEnforceIf(in_room.Not())
-                    sessions_in_room.append((i, in_room))
-            
-            # For each pair of sessions that could be in this room, enforce no overlap
-            for idx1, (i, in_room_i) in enumerate(sessions_in_room):
-                for idx2, (j, in_room_j) in enumerate(sessions_in_room):
-                    if i < j:  # Only check each pair once
-                        # If both sessions are in this room, they must not overlap
-                        both_in_room = model.NewBoolVar(f'both_in_room_{r_idx}_{i}_{j}')
-                        model.AddBoolAnd([in_room_i, in_room_j]).OnlyEnforceIf(both_in_room)
-                        model.AddBoolOr([in_room_i.Not(), in_room_j.Not()]).OnlyEnforceIf(both_in_room.Not())
-                        
-                        # If both sessions are in the same room, enforce no overlap with gap
-                        # We need: (i ends + gap <= j starts) OR (j ends + gap <= i starts)
-                        # Create boolean variables to represent each condition
-                        i_ends_before_j = model.NewBoolVar(f'i_ends_before_j_{r_idx}_{i}_{j}')
-                        j_ends_before_i = model.NewBoolVar(f'j_ends_before_i_{r_idx}_{i}_{j}')
-                        
-                        # If both sessions are in the same room, enforce no overlap with gap
-                        # We need: (i ends + gap <= j starts) OR (j ends + gap <= i starts)
-                        # Use a simpler direct approach
-                        
-                        # Create boolean: true if i ends (with gap) before j starts
-                        # i ends at: slot_vars[i] + session_slot_durations[i]
-                        # With gap, next can start at: slot_vars[i] + session_slot_durations[i] + gap_slots
-                        # So we need: slot_vars[j] >= slot_vars[i] + session_slot_durations[i] + gap_slots
-                        model.Add(slot_vars[j] >= slot_vars[i] + session_slot_durations[i] + gap_slots).OnlyEnforceIf(i_ends_before_j)
-                        model.Add(slot_vars[j] < slot_vars[i] + session_slot_durations[i] + gap_slots).OnlyEnforceIf(i_ends_before_j.Not())
-                        
-                        # Create boolean: true if j ends (with gap) before i starts
-                        model.Add(slot_vars[i] >= slot_vars[j] + session_slot_durations[j] + gap_slots).OnlyEnforceIf(j_ends_before_i)
-                        model.Add(slot_vars[i] < slot_vars[j] + session_slot_durations[j] + gap_slots).OnlyEnforceIf(j_ends_before_i.Not())
-                        
-                        # If both in room, at least one ordering must be true (ensures no overlap with gap)
-                        model.AddBoolOr([i_ends_before_j, j_ends_before_i]).OnlyEnforceIf(both_in_room)
+        # Step 2: Create interval variables for time-based scheduling
+        # Always schedules time slots (never preserves existing times)
+        start_vars, interval_vars = create_interval_variables(
+            model, num_sessions, num_slots, session_slot_durations
+        )
         
-        # Constraint 3: All sessions must be assigned to a room
-        for i in range(num_sessions):
-            # Force room assignment (room_vars[i] >= 0)
-            # But only if there are valid rooms for this session
-            if valid_rooms_per_session[i]:
-                model.Add(room_vars[i] >= 0)
+        # Step 3: Add no-overlap constraints per room (sessions in same room can't overlap)
+        add_room_no_overlap_constraints(
+            model, num_sessions, num_rooms, start_vars, interval_vars,
+            room_indices, session_slot_durations, gap_slots, num_slots
+        )
         
-        # Constraint 4: Session must fit within time slots (end time <= last slot)
-        for i in range(num_sessions):
-            model.Add(slot_vars[i] + session_slot_durations[i] <= num_slots)
+        # Step 4: Add speaker conflict constraints (same speaker can't have overlapping sessions)
+        add_speaker_no_overlap_constraints(
+            model, num_sessions, request.sessions, interval_vars
+        )
         
-        # Objective: Minimize schedule span while preferring topic grouping
-        # Calculate max and min slot indices
-        max_slot = model.NewIntVar(0, num_slots - 1, 'max_slot')
-        min_slot = model.NewIntVar(0, num_slots - 1, 'min_slot')
+        # Step 5: Add whole venue constraints (sessions without rooms can't overlap with ANY session)
+        add_whole_venue_no_overlap_constraints(
+            model, num_sessions, room_indices, start_vars, interval_vars,
+            session_slot_durations, gap_slots, num_slots
+        )
         
-        for i in range(num_sessions):
-            model.Add(max_slot >= slot_vars[i])
-            model.Add(min_slot <= slot_vars[i])
+        # Step 6: Add temporal constraints (sessions must fit within time slots)
+        add_temporal_constraints(
+            model, num_sessions, num_slots, start_vars, session_slot_durations
+        )
         
-        schedule_span = model.NewIntVar(0, num_slots - 1, 'schedule_span')
-        model.Add(schedule_span == max_slot - min_slot)
-        
-        # Topic grouping penalty (minimize distance between sessions with same topic)
-        topic_penalty = []
-        for i in range(num_sessions):
-            for j in range(i + 1, num_sessions):
-                if request.sessions[i].topic == request.sessions[j].topic:
-                    # Penalty is the absolute difference in slot assignments
-                    diff = model.NewIntVar(0, num_slots, f'topic_diff_{i}_{j}')
-                    model.AddAbsEquality(diff, slot_vars[i] - slot_vars[j])
-                    topic_penalty.append(diff)
-        
-        # Objective: Minimize max slot (spreads sessions out across time)
-        # This ensures sessions are distributed across different time slots
-        # Topic grouping is handled implicitly by the solver when there are multiple optimal solutions
-        model.Minimize(max_slot)
+        # Step 7: Create objective function (minimize max slot)
+        create_objective_function(
+            model, num_sessions, num_slots, start_vars, request.sessions
+        )
         
         # Solve
         solver = cp_model.CpSolver()
@@ -564,61 +839,21 @@ def schedule_event(request: ScheduleEventRequest):
         status = solver.Solve(model)
         
         # Debug logging
-        print(f"Solver status: {status} (OPTIMAL={cp_model.OPTIMAL}, FEASIBLE={cp_model.FEASIBLE})")
+        print(f"\n=== Solver Results ===")
+        print(f"Solver status: {status}")
+        print(f"  OPTIMAL={cp_model.OPTIMAL}, FEASIBLE={cp_model.FEASIBLE}, INFEASIBLE={cp_model.INFEASIBLE}, MODEL_INVALID={cp_model.MODEL_INVALID}")
         print(f"Number of sessions: {num_sessions}, rooms: {num_rooms}, time slots: {num_slots}")
         print(f"Slot size: {slot_duration_minutes} minutes")
         print(f"Gap time: {request.gapMinutes} minutes ({gap_slots} slots)")
+        print(f"Whole venue sessions: {sum(1 for idx in room_indices if idx is None)}")
         
         if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-            assignments = []
-            slot_usage = {}  # Track which slots are used
-            room_usage = {}  # Track which rooms are used
-            
-            for i, session in enumerate(request.sessions):
-                room_idx = solver.Value(room_vars[i])
-                slot_idx = solver.Value(slot_vars[i])
-                
-                # Debug logging
-                print(f"Session {session.id} ({session.title}): room_idx={room_idx}, slot_idx={slot_idx}")
-                
-                room_id = None
-                if room_idx >= 0 and room_idx < num_rooms:
-                    room_id = request.rooms[room_idx].id
-                    room_name = request.rooms[room_idx].name
-                    if room_id not in room_usage:
-                        room_usage[room_id] = []
-                    room_usage[room_id].append(session.id)
-                    print(f"  -> Assigned to room {room_id} ({room_name})")
-                else:
-                    print(f"  -> WARNING: No room assigned (room_idx={room_idx})")
-                
-                start_time = None
-                if slot_idx < len(time_slots):
-                    start_time = time_slots[slot_idx].isoformat()
-                    if slot_idx not in slot_usage:
-                        slot_usage[slot_idx] = []
-                    slot_usage[slot_idx].append(session.id)
-                    print(f"  -> Assigned to slot {slot_idx} ({start_time})")
-                else:
-                    print(f"  -> WARNING: Invalid slot index {slot_idx}")
-                
-                assignments.append(ScheduleAssignment(
-                    sessionId=session.id,
-                    roomId=room_id,
-                    startTime=start_time
-                ))
-            
-            # Log conflicts
-            print(f"\nSlot usage summary:")
-            for slot_idx, session_ids in sorted(slot_usage.items()):
-                if len(session_ids) > 1:
-                    print(f"  WARNING: Slot {slot_idx} has {len(session_ids)} sessions: {session_ids}")
-                else:
-                    print(f"  Slot {slot_idx}: {session_ids[0]}")
-            
-            print(f"\nRoom usage summary:")
-            for room_id, session_ids in sorted(room_usage.items()):
-                print(f"  Room {room_id}: {len(session_ids)} sessions: {session_ids}")
+            print(f"✓ Solver found a solution!")
+            # Step 8: Extract solution (preserves user-provided room assignments, schedules time slots)
+            assignments = extract_solution(
+                solver, num_sessions, start_vars,
+                request.sessions, request.rooms, time_slots, room_indices
+            )
             
             return ScheduleEventResponse(
                 assignments=assignments,

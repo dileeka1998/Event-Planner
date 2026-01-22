@@ -28,6 +28,7 @@ export function SchedulerPage() {
   const [gapMinutes, setGapMinutes] = useState(15);
   const [eventStartTime, setEventStartTime] = useState('09:00'); // Default to 9:00 AM in local time
   const [previewAssignments, setPreviewAssignments] = useState<Array<{ sessionId: number; roomId?: number | null; startTime?: string | null }> | null>(null);
+  const [conflictedSessionIds, setConflictedSessionIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     fetchEvents();
@@ -250,6 +251,7 @@ export function SchedulerPage() {
   const handleCancelEdit = () => {
     setEditingSessionId(null);
     setEditForm({ roomId: 'none', startTime: '' });
+    setConflictedSessionIds(new Set()); // Clear conflicts when canceling
   };
 
   const handleSaveEdit = async (session: Session) => {
@@ -300,9 +302,20 @@ export function SchedulerPage() {
       await updateSession(selectedEventId, session.id, updateData);
       toast.success('Session updated successfully');
       setEditingSessionId(null);
+      setConflictedSessionIds(new Set()); // Clear conflicts on success
       await fetchEventDetails(selectedEventId);
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to update session');
+      const errorResponse = error?.response?.data;
+      const errorMessage = errorResponse?.message || errorResponse || 'Failed to update session';
+      toast.error(errorMessage);
+      
+      // Extract conflict data if available
+      const conflictData = errorResponse?.conflictData;
+      if (conflictData) {
+        const conflictedIds = new Set<number>([conflictData.sessionId, conflictData.conflictingSessionId]);
+        setConflictedSessionIds(conflictedIds);
+      }
+      
       console.error(error);
     }
   };
@@ -431,8 +444,13 @@ export function SchedulerPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {displaySessions.map((session) => (
-                    <TableRow key={session.id}>
+                  {displaySessions.map((session) => {
+                    const isConflicted = conflictedSessionIds.has(session.id);
+                    return (
+                    <TableRow 
+                      key={session.id}
+                      className={isConflicted ? 'bg-red-50 border-red-200 border-2' : ''}
+                    >
                       <TableCell className="font-medium">{session.title}</TableCell>
                       <TableCell>{session.speaker || '-'}</TableCell>
                       <TableCell>
@@ -506,7 +524,8 @@ export function SchedulerPage() {
                         )}
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
