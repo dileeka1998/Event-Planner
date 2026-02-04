@@ -219,17 +219,22 @@ export function BudgetPage() {
   }, [] as { category: string; planned: number; actual: number }[]);
 
   function getCategoryColor(category: string): string {
-    const colors: Record<string, string> = {
-      'Venue': '#0F6AB4',
-      'Catering': '#28A9A1',
-      'Technology': '#8B5CF6',
-      'Audio/Visual': '#8B5CF6',
-      'Marketing': '#F9B233',
-      'Staff': '#10B981',
-      'Miscellaneous': '#6B7280',
-      'Other': '#6B7280',
-    };
-    return colors[category] || '#6B7280';
+    // Generate a consistent color based on category name hash
+    // This ensures the same category always gets the same color
+    if (!category) return '#6B7280';
+    
+    // Simple hash function to generate consistent colors
+    let hash = 0;
+    for (let i = 0; i < category.length; i++) {
+      hash = category.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    
+    // Generate a color from the hash (using HSL for better color distribution)
+    const hue = Math.abs(hash % 360);
+    const saturation = 60 + (Math.abs(hash) % 20); // 60-80% saturation
+    const lightness = 45 + (Math.abs(hash) % 15); // 45-60% lightness
+    
+    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
   }
 
   return (
@@ -272,18 +277,21 @@ export function BudgetPage() {
               title="Total Estimated"
               value={`LKR ${totalEstimated.toLocaleString()}`}
               icon={DollarSign}
+              iconLabel="LKR"
               color="#0F6AB4"
             />
             <KPICard 
               title="Total Actual"
               value={`LKR ${totalActual.toLocaleString()}`}
               icon={DollarSign}
+              iconLabel="LKR"
               color="#28A9A1"
             />
             <KPICard 
               title="Remaining"
               value={`LKR ${remaining.toLocaleString()}`}
               icon={DollarSign}
+              iconLabel="LKR"
               color="#10B981"
               trend={`${variance}% ${parseFloat(variance) > 0 ? 'under' : 'over'} budget`}
             />
@@ -291,6 +299,7 @@ export function BudgetPage() {
               title="Utilization"
               value={`${utilizationPercent}%`}
               icon={DollarSign}
+              iconLabel="LKR"
               color="#F9B233"
               showProgress
               progressValue={parseFloat(utilizationPercent)}
@@ -427,7 +436,7 @@ export function BudgetPage() {
       {!selectedEventId && events.length === 0 && (
         <Card>
           <CardContent className="p-12 text-center">
-            <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <span className="text-3xl font-semibold text-gray-400 mx-auto mb-4 block">LKR</span>
             <h3 className="text-gray-900 mb-2">No events available</h3>
             <p className="text-gray-600">Create an event first to view its budget</p>
           </CardContent>

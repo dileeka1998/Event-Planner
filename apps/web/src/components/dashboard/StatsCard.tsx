@@ -6,12 +6,13 @@ interface StatsCardProps {
   title: string;
   value: string | number;
   icon: LucideIcon;
+  iconLabel?: string;
   trend?: string;
   trendUp?: boolean;
   color?: string;
 }
 
-export function StatsCard({ title, value, icon: Icon, trend, trendUp, color = '#0F6AB4' }: StatsCardProps) {
+export function StatsCard({ title, value, icon: Icon, iconLabel, trend, trendUp, color = '#0F6AB4' }: StatsCardProps) {
   return (
     <Card className="hover:shadow-lg transition-shadow">
       <CardContent className="p-6">
@@ -32,7 +33,11 @@ export function StatsCard({ title, value, icon: Icon, trend, trendUp, color = '#
             className="w-12 h-12 rounded-lg flex items-center justify-center"
             style={{ backgroundColor: `${color}15` }}
           >
-            <Icon className="w-6 h-6" style={{ color }} />
+            {iconLabel ? (
+              <span className="text-xs font-semibold" style={{ color }}>{iconLabel}</span>
+            ) : (
+              <Icon className="w-6 h-6" style={{ color }} />
+            )}
           </div>
         </div>
       </CardContent>

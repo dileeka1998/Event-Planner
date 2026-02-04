@@ -1,4 +1,4 @@
-import { MapPin, Users, DollarSign, Phone } from 'lucide-react';
+import { MapPin, Users, Phone } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -82,9 +82,9 @@ export function VenueCard({ venue, onBook, onEdit, onDelete, compact = false }: 
           </div>
           {venue.hourlyRate && (
             <div className="flex items-center gap-2 text-sm text-gray-900">
-              <DollarSign className="w-4 h-4 flex-shrink-0" />
+              <span className="text-xs font-semibold flex-shrink-0">LKR</span>
               <span>
-                LKR {typeof venue.hourlyRate === 'string' 
+                {typeof venue.hourlyRate === 'string' 
                   ? parseFloat(venue.hourlyRate).toLocaleString() 
                   : venue.hourlyRate.toLocaleString()} per hour
               </span>

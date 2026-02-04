@@ -7,6 +7,7 @@ import re
 from typing import Optional, Tuple, List, Dict
 from datetime import datetime, timedelta
 from ortools.sat.python import cp_model
+from dateutil import parser as date_parser
 
 MODEL = os.environ.get("SPACY_MODEL", "en_core_web_sm")
 try:
@@ -129,6 +130,10 @@ def extract_and_clean_title(text: str, doc) -> Optional[str]:
                 sent_low = sent.lower()
                 if any(keyword in sent_low for keyword in event_keywords):
                     title = sent.strip()
+                    # Strip structured-brief boilerplate so title = event name + year only
+                    title = re.sub(r'^Event\s+Name\s*:?\s*', '', title, flags=re.IGNORECASE).strip()
+                    title = re.sub(r'\s+Event\s+Type\s+.*$', '', title, flags=re.IGNORECASE).strip()
+                    title = re.sub(r'\s+Start\s*$', '', title, flags=re.IGNORECASE).strip()
 
                     # Remove common short prefixes
                     for prefix in ['a ', 'an ', 'the ', 'this ', 'that ', 'our ', 'my ']:
@@ -159,6 +164,10 @@ def extract_and_clean_title(text: str, doc) -> Optional[str]:
                 # pick short-ish meaningful sentences
                 if 10 < len(sent) and len(sent.split()) <= 12:
                     title = sent.strip()
+                    # Strip structured-brief boilerplate so title = event name + year only
+                    title = re.sub(r'^Event\s+Name\s*:?\s*', '', title, flags=re.IGNORECASE).strip()
+                    title = re.sub(r'\s+Event\s+Type\s+.*$', '', title, flags=re.IGNORECASE).strip()
+                    title = re.sub(r'\s+Start\s*$', '', title, flags=re.IGNORECASE).strip()
                     for prefix in ['a ', 'an ', 'the ', 'this ', 'that ']:
                         if title.lower().startswith(prefix):
                             title = title[len(prefix):].strip()
@@ -171,6 +180,284 @@ def extract_and_clean_title(text: str, doc) -> Optional[str]:
         return None
     except Exception:
         return None
+
+
+# ============================================================================
+# Enhanced Parse Brief Extraction Functions
+# ============================================================================
+
+def extract_venue_name(text: str) -> Optional[str]:
+    """Extract venue name from patterns like 'Venue: X' or 'at X'."""
+    patterns = [
+        r'venue[:\s]+([^\n,]+)',
+        r'at\s+([A-Z][a-zA-Z\s&,\-]+(?:Ballroom|Hall|Room|Venue|Center|Centre|Theatre|Theater))',
+        r'venue[:\s]+([A-Z][a-zA-Z\s&,\-]+)',
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            venue_name = match.group(1).strip()
+            # Clean up common trailing words
+            venue_name = re.sub(r'\s*(?:,|\.|;).*$', '', venue_name)
+            if len(venue_name) > 2:
+                return venue_name
+    return None
+
+
+def extract_venue_capacity(text: str, expected_audience: Optional[int] = None) -> Optional[int]:
+    """Extract venue capacity from text. Falls back to expected audience if not found."""
+    patterns = [
+        r'venue[:\s]+[^\n]+(?:capacity|caps?)[:\s]+(\d{1,6}(?:,\d{3})*)',
+        r'capacity[:\s]+(\d{1,6}(?:,\d{3})*)',
+        r'(\d{1,6}(?:,\d{3})*)\s*(?:people|guests|attendees?)\s*(?:capacity|can\s+accommodate)',
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            try:
+                capacity = int(match.group(1).replace(",", ""))
+                return capacity
+            except ValueError:
+                continue
+    
+    # Fallback to expected audience
+    return expected_audience
+
+
+def extract_dates(text: str) -> Tuple[Optional[str], Optional[str]]:
+    """Extract start and end dates from text. Returns ISO format strings."""
+    # Common date patterns
+    date_patterns = [
+        r'start\s+date[:\s]+(\d{1,2}\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4})',
+        r'end\s+date[:\s]+(\d{1,2}\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4})',
+        r'(\d{1,2}\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4})\s*(?:to|-)\s*(\d{1,2}\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4})',
+        r'(\d{1,2}[/-]\d{1,2}[/-]\d{4})\s*(?:to|-)\s*(\d{1,2}[/-]\d{1,2}[/-]\d{4})',
+    ]
+    
+    start_date = None
+    end_date = None
+    
+    # Try to find date range
+    for pattern in date_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            try:
+                if len(match.groups()) == 2:
+                    # Date range found
+                    date1_str = match.group(1).strip()
+                    date2_str = match.group(2).strip()
+                    date1 = date_parser.parse(date1_str, dayfirst=True, fuzzy=True)
+                    date2 = date_parser.parse(date2_str, dayfirst=True, fuzzy=True)
+                    if date1 <= date2:
+                        start_date = date1.isoformat()[:10]  # YYYY-MM-DD
+                        end_date = date2.isoformat()[:10]
+                    else:
+                        start_date = date2.isoformat()[:10]
+                        end_date = date1.isoformat()[:10]
+                    break
+                elif len(match.groups()) == 1:
+                    # Single date found, check if it's start or end
+                    date_str = match.group(1).strip()
+                    parsed_date = date_parser.parse(date_str, dayfirst=True, fuzzy=True)
+                    date_iso = parsed_date.isoformat()[:10]
+                    if 'start' in match.group(0).lower():
+                        start_date = date_iso
+                    elif 'end' in match.group(0).lower():
+                        end_date = date_iso
+                    else:
+                        start_date = date_iso
+                        end_date = date_iso
+                    break
+            except (ValueError, AttributeError):
+                continue
+    
+    return start_date, end_date
+
+
+def extract_budget_items(text: str) -> List[Dict[str, any]]:
+    """Extract budget items from 'Budget Items (N Total)' section."""
+    budget_items = []
+    
+    # Find budget items section
+    budget_section_match = re.search(
+        r'budget\s+items?\s*\(?\d*\s*total\)?[:\s]*(.*?)(?=\n\n|\n[A-Z][a-z]+\s*\(|$)',
+        text,
+        re.IGNORECASE | re.DOTALL
+    )
+    
+    if not budget_section_match:
+        return budget_items
+    
+    budget_section = budget_section_match.group(1)
+    
+    # Pattern: "Item name – LKR amount" or "Item name - LKR amount"
+    # Match amount with optional multiplier immediately after the number
+    item_pattern = r'([^–\-]+?)[–\-]\s*(?:lkr|rs|rupees?)?\s*(\d{1,6}(?:,\d{3})*(?:\.\d+)?)\s*(k|thousand|million)?'
+    
+    for match in re.finditer(item_pattern, budget_section, re.IGNORECASE):
+        item_name = match.group(1).strip()
+        amount_str = match.group(2)
+        multiplier = match.group(3)  # Explicit multiplier if present (k, thousand, million)
+        
+        # Check if number has commas (already in thousands/hundreds of thousands format)
+        has_commas = ',' in amount_str
+        amount_str_clean = amount_str.replace(",", "")
+        
+        try:
+            amount = float(amount_str_clean)
+            
+            # Apply multipliers only if:
+            # 1. There's an explicit multiplier token (k, thousand, million) immediately after the number
+            # 2. AND the number doesn't have commas (commas indicate it's already in full format)
+            if has_commas:
+                # Number already has commas (e.g., "450,000"), use as-is regardless of multiplier
+                amount = int(amount)
+            elif multiplier:
+                # Explicit multiplier present (e.g., "450k", "450 thousand", "1.5 million")
+                multiplier_lower = multiplier.lower()
+                if 'million' in multiplier_lower:
+                    amount = int(amount * 1000000)
+                elif 'k' in multiplier_lower or 'thousand' in multiplier_lower:
+                    # Only apply if number is reasonably small (less than 10000)
+                    # Large numbers with k/thousand are likely already in correct format
+                    if amount < 10000:
+                        amount = int(amount * 1000)
+                    else:
+                        amount = int(amount)
+                else:
+                    amount = int(amount)
+            else:
+                # No explicit multiplier, use as-is
+                amount = int(amount)
+            
+            budget_items.append({
+                "description": item_name,
+                "amount": amount
+            })
+        except ValueError:
+            continue
+    
+    return budget_items
+
+
+def extract_rooms(text: str) -> List[Dict[str, any]]:
+    """Extract rooms from 'Rooms (N Total)' section."""
+    rooms = []
+    
+    # Find rooms section
+    rooms_section_match = re.search(
+        r'rooms?\s*\(?\d*\s*total\)?[:\s]*(.*?)(?=\n\n|\n[A-Z][a-z]+\s*\(|$)',
+        text,
+        re.IGNORECASE | re.DOTALL
+    )
+    
+    if not rooms_section_match:
+        return rooms
+    
+    rooms_section = rooms_section_match.group(1)
+    
+    # Pattern: Room name (optional capacity)
+    # Each room on a new line
+    lines = rooms_section.split('\n')
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        
+        # Try to extract capacity if mentioned
+        capacity_match = re.search(r'\(?\s*(\d{1,6}(?:,\d{3})*)\s*(?:capacity|caps?|people|seats?)\s*\)?', line, re.IGNORECASE)
+        capacity = None
+        if capacity_match:
+            try:
+                capacity = int(capacity_match.group(1).replace(",", ""))
+                # Remove capacity from room name
+                line = re.sub(r'\(?\s*\d{1,6}(?:,\d{3})*\s*(?:capacity|caps?|people|seats?)\s*\)?', '', line, flags=re.IGNORECASE).strip()
+            except ValueError:
+                pass
+        
+        # Strip any parenthetical suffix (e.g. "(capacity:" or "(capacity: 150)") so room name matches session roomName
+        if '(' in line:
+            line = line[:line.index('(')].strip()
+        # Normalize spaces: collapse multiple spaces, trim
+        room_name = ' '.join(line.split()).strip()
+        if room_name:
+            rooms.append({
+                "name": room_name,
+                "capacity": capacity or 100  # Default capacity
+            })
+    
+    return rooms
+
+
+# Budget category labels that must not be treated as session titles (from Budget Items section)
+_BUDGET_CATEGORY_TITLES = frozenset(
+    s.lower() for s in (
+        'Venue', 'Technology', 'Marketing', 'Catering', 'Staff', 'Security',
+        'Media', 'General', 'Budget Items'
+    )
+)
+
+
+def extract_sessions(text: str) -> List[Dict[str, any]]:
+    """Extract sessions from 'Sessions (N Total)' section. Stops at 'Budget Items' section."""
+    sessions = []
+    
+    # Find sessions section; do not include content from "Budget Items (...)" section
+    sessions_section_match = re.search(
+        r'sessions?\s*\(?\d*\s*total\)?[:\s]*(.*?)(?=\n\n|\n[A-Z][a-z]+\s*\(|\nBudget\s+Items\s*\(|$)',
+        text,
+        re.IGNORECASE | re.DOTALL
+    )
+    
+    if not sessions_section_match:
+        return sessions
+    
+    sessions_section = sessions_section_match.group(1)
+    
+    # Pattern: "Session Title Room: Room Name Speaker: Speaker Name Duration: X min"
+    lines = sessions_section.split('\n')
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        
+        # Stop if we hit a Budget Items header (e.g. "Budget Items (15 Total – LKR 2.5 Million)")
+        if re.match(r'^Budget\s+Items\s*\(', line, re.IGNORECASE):
+            break
+        
+        room_match = re.search(r'room[:\s]+([^\n]+?)(?:\s+speaker[:\s]|$)', line, re.IGNORECASE)
+        speaker_match = re.search(r'speaker[:\s]+([^\n]+?)(?:\s+duration[:\s]|$)', line, re.IGNORECASE)
+        duration_match = re.search(r'duration[:\s]+(\d+)\s*(?:min|minutes?|mins?)', line, re.IGNORECASE)
+        
+        title_match = re.match(r'^([^:]+?)(?:\s+room[:\s]|$)', line, re.IGNORECASE)
+        if title_match:
+            title = title_match.group(1).strip()
+        else:
+            title = line.split(':')[0].strip() if ':' in line else line.strip()
+        
+        # Skip lines that are budget section headers/categories, not real sessions
+        title_lower = title.lower()
+        if title_lower in _BUDGET_CATEGORY_TITLES:
+            continue
+        if re.match(r'^Budget\s+Items\s*\(', title, re.IGNORECASE):
+            continue
+        
+        room_name = room_match.group(1).strip() if room_match else None
+        speaker = speaker_match.group(1).strip() if speaker_match else None
+        duration = int(duration_match.group(1)) if duration_match else 60
+        
+        if title:
+            sessions.append({
+                "title": title,
+                "speaker": speaker,
+                "roomName": room_name,
+                "durationMin": duration
+            })
+    
+    return sessions
 
 
 @app.post("/parse-brief")
@@ -295,11 +582,26 @@ def parse_brief(b: Brief):
                     tracks = num
                     break
 
+        # Extract additional fields
+        venue_name = extract_venue_name(text)
+        venue_capacity = extract_venue_capacity(text, audience)  # Use audience as fallback
+        start_date, end_date = extract_dates(text)
+        budget_items = extract_budget_items(text)
+        rooms = extract_rooms(text)
+        sessions = extract_sessions(text)
+
         return {
             "title": title,
             "estimatedAudience": audience,
             "budgetLkr": budget,
-            "tracks": tracks
+            "tracks": tracks,
+            "venueName": venue_name,
+            "venueCapacity": venue_capacity,
+            "startDate": start_date,
+            "endDate": end_date,
+            "budgetItems": budget_items,
+            "rooms": rooms,
+            "sessions": sessions
         }
     except Exception as e:
         # Return error response instead of crashing
@@ -308,6 +610,13 @@ def parse_brief(b: Brief):
             "estimatedAudience": None,
             "budgetLkr": None,
             "tracks": None,
+            "venueName": None,
+            "venueCapacity": None,
+            "startDate": None,
+            "endDate": None,
+            "budgetItems": [],
+            "rooms": [],
+            "sessions": [],
             "error": str(e)
         }
 

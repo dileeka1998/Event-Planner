@@ -5,7 +5,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
-import { Plus, Sparkles, ArrowRight, Calendar as CalendarIcon, MapPin, X, Loader2, Filter, Users, DollarSign, Clock } from 'lucide-react';
+import { Plus, Sparkles, ArrowRight, Calendar as CalendarIcon, MapPin, X, Loader2, Filter, Users, Clock } from 'lucide-react';
 import { Calendar as CalendarComponent } from '../components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { Badge } from '../components/ui/badge';
@@ -63,12 +63,57 @@ function parseDateRange(dateRange: string): { startDate: string; endDate: string
   return null;
 }
 
+// Budget category titles that must not be shown as sessions (from Budget Items section)
+const BUDGET_CATEGORY_SESSION_TITLES = new Set([
+  'venue', 'technology', 'marketing', 'catering', 'staff', 'security',
+  'media', 'general', 'budget items',
+]);
+
+function filterRealSessions(sessions: any[]): any[] {
+  if (!Array.isArray(sessions)) return [];
+  return sessions.filter((s: any) => {
+    const title = (s?.title ?? '').trim();
+    if (!title) return false;
+    const lower = title.toLowerCase();
+    if (BUDGET_CATEGORY_SESSION_TITLES.has(lower)) return false;
+    if (/^Budget\s+Items\s*\(/i.test(title)) return false;
+    return true;
+  });
+}
+
+// Mirror backend category inference (events.controller.ts) for consistent preview
+function inferBudgetCategory(description: string): string {
+  const d = (description ?? '').toLowerCase();
+  if (d.includes('venue') || d.includes('rental') || d.includes('hall')) return 'Venue';
+  if (d.includes('catering') || d.includes('food') || d.includes('beverage')) return 'Catering';
+  if (d.includes('audio') || d.includes('visual') || d.includes('av') || d.includes('sound') || d.includes('lighting')) return 'Technology';
+  if (d.includes('marketing') || d.includes('promotion') || d.includes('advertising')) return 'Marketing';
+  if (d.includes('staff') || d.includes('personnel') || d.includes('coordination')) return 'Staff';
+  if (d.includes('photography') || d.includes('videography') || d.includes('media')) return 'Media';
+  if (d.includes('security') || d.includes('safety')) return 'Security';
+  if (d.includes('transport') || d.includes('logistics')) return 'Logistics';
+  return 'General';
+}
+
+// Strip leading "Category: " from description when it matches inferred category for cleaner display
+function budgetItemDisplayDescription(description: string, category: string): string {
+  const desc = (description ?? '').trim();
+  const prefix = category + ': ';
+  if (category !== 'General' && desc.toLowerCase().startsWith(prefix.toLowerCase())) {
+    return desc.slice(prefix.length).trim();
+  }
+  return desc;
+}
+
 export function EventsPage({ onNavigate }: EventsPageProps = {}) {
   const [showAIResult, setShowAIResult] = useState(false);
   const [aiInput, setAiInput] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [isAddVenueOpen, setIsAddVenueOpen] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
+  const [parsedData, setParsedData] = useState<any>(null);
+  const [previewData, setPreviewData] = useState<any>(null);
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
@@ -226,15 +271,24 @@ export function EventsPage({ onNavigate }: EventsPageProps = {}) {
     setIsParsing(true);
     try {
       const { data } = await parseBrief({ text: aiInput });
-      setShowAIResult(true);
-      setEventDetails({
-        ...eventDetails,
-        brief: aiInput,
-        name: data.title || eventDetails.name,
-        expectedAudience: data.estimatedAudience?.toString() || eventDetails.expectedAudience,
-        budget: data.budgetLkr?.toString() || eventDetails.budget,
+      setParsedData(data);
+      
+      // Initialize preview data with parsed data
+      setPreviewData({
+        title: data.title || '',
+        startDate: data.startDate || '',
+        endDate: data.endDate || '',
+        expectedAudience: data.estimatedAudience || 0,
+        budget: data.budgetLkr || 0,
+        venueName: data.venueName || '',
+        venueCapacity: data.venueCapacity || data.estimatedAudience || 0,
+        budgetItems: data.budgetItems || [],
+        rooms: data.rooms || [],
+        sessions: filterRealSessions(data.sessions || []),
       });
-      toast.success('AI suggestions applied successfully!');
+      
+      setShowPreviewDialog(true);
+      toast.success('AI parsing completed! Review and edit the details.');
     } catch (error: any) {
       toast.error('AI parsing failed. Please try again.');
       console.error(error);
@@ -283,6 +337,80 @@ export function EventsPage({ onNavigate }: EventsPageProps = {}) {
       toast.success('Venue added and selected!');
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Failed to create venue');
+    }
+  };
+
+  const handleCreateEventFromPreview = async () => {
+    const userId = getUserId();
+    if (!userId) {
+      toast.error('Please login to create events');
+      return;
+    }
+
+    if (!previewData || !previewData.title || !previewData.startDate || !previewData.endDate) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    // Validate that start date is not in the past
+    const startDate = new Date(previewData.startDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    startDate.setHours(0, 0, 0, 0);
+    
+    if (startDate < today) {
+      toast.error('Start date cannot be in the past');
+      return;
+    }
+
+    // Validate that start date is not after end date
+    const endDate = new Date(previewData.endDate);
+    if (startDate > endDate) {
+      toast.error('Start date cannot be after end date');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Prepare budget items for API
+      const budgetItems = previewData.budgetItems?.map((item: any) => ({
+        category: inferBudgetCategory(item.description),
+        description: item.description,
+        estimatedAmount: String(item.amount),
+        quantity: 1,
+      })) || [];
+
+      // Reconstruct brief with updated preview data for backend parsing
+      // The backend will parse the brief and use the parsed data
+      const updatedBrief = aiInput; // Use original brief - backend will parse it
+      
+      await createEvent({
+        organizerId: userId,
+        title: previewData.title,
+        startDate: previewData.startDate,
+        endDate: previewData.endDate,
+        expectedAudience: previewData.expectedAudience || undefined,
+        budget: previewData.budget ? String(previewData.budget) : undefined,
+        venueId: selectedVenue?.id, // Venue will be created/validated by backend if venueName is in brief
+        brief: updatedBrief, // Include the original brief for backend parsing
+        budgetItems: budgetItems.length > 0 ? budgetItems : undefined,
+      });
+      
+      // Close preview dialog and reset
+      setShowPreviewDialog(false);
+      setPreviewData(null);
+      setParsedData(null);
+      setAiInput('');
+      setSelectedVenue(null);
+      
+      // Refresh events list
+      await fetchEvents();
+      toast.success('Event created successfully!');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to create event');
+      console.error(error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -642,6 +770,206 @@ export function EventsPage({ onNavigate }: EventsPageProps = {}) {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Preview Dialog for AI Parsed Data */}
+        <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Review & Edit Event Details</DialogTitle>
+            </DialogHeader>
+            
+            {previewData && (
+              <div className="space-y-6 py-4">
+                {/* Basic Info */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Basic Information</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Event Name *</Label>
+                      <Input
+                        value={previewData.title}
+                        onChange={(e) => setPreviewData({...previewData, title: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <Label>Expected Audience</Label>
+                      <Input
+                        type="number"
+                        value={previewData.expectedAudience}
+                        onChange={(e) => setPreviewData({...previewData, expectedAudience: parseInt(e.target.value) || 0})}
+                      />
+                    </div>
+                    <div>
+                      <Label>Start Date *</Label>
+                      <Input
+                        type="date"
+                        value={previewData.startDate}
+                        onChange={(e) => setPreviewData({...previewData, startDate: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <Label>End Date *</Label>
+                      <Input
+                        type="date"
+                        value={previewData.endDate}
+                        onChange={(e) => setPreviewData({...previewData, endDate: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <Label>Budget (LKR)</Label>
+                      <Input
+                        type="number"
+                        value={previewData.budget}
+                        onChange={(e) => setPreviewData({...previewData, budget: parseInt(e.target.value) || 0})}
+                      />
+                    </div>
+                    <div>
+                      <Label>Venue Name</Label>
+                      <Input
+                        value={previewData.venueName}
+                        onChange={(e) => setPreviewData({...previewData, venueName: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <Label>Venue Capacity</Label>
+                      <Input
+                        type="number"
+                        value={previewData.venueCapacity}
+                        onChange={(e) => setPreviewData({...previewData, venueCapacity: parseInt(e.target.value) || 0})}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Budget Items */}
+                {previewData.budgetItems && previewData.budgetItems.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Budget Items</h3>
+                    <div className="space-y-2 max-h-48 overflow-y-auto border rounded p-3">
+                      {previewData.budgetItems.map((item: any, idx: number) => {
+                        const category = inferBudgetCategory(item.description);
+                        const displayDescription = budgetItemDisplayDescription(item.description, category);
+                        return (
+                          <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge variant="secondary" className="shrink-0">{category}</Badge>
+                                <span className="font-medium">{displayDescription}</span>
+                              </div>
+                              <div className="text-sm text-gray-600 mt-1">Est. LKR {Number(item.amount).toLocaleString()}</div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const newItems = [...previewData.budgetItems];
+                                newItems.splice(idx, 1);
+                                setPreviewData({...previewData, budgetItems: newItems});
+                              }}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Rooms */}
+                {previewData.rooms && previewData.rooms.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Rooms</h3>
+                    <div className="space-y-2 max-h-48 overflow-y-auto border rounded p-3">
+                      {previewData.rooms.map((room: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                          <div className="flex-1">
+                            <span className="font-medium">{room.name}</span>
+                            <span className="text-gray-600 ml-2">Capacity: {room.capacity}</span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const newRooms = [...previewData.rooms];
+                              newRooms.splice(idx, 1);
+                              setPreviewData({...previewData, rooms: newRooms});
+                            }}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sessions */}
+                {previewData.sessions && previewData.sessions.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Sessions</h3>
+                    <div className="space-y-2 max-h-64 overflow-y-auto border rounded p-3">
+                      {previewData.sessions.map((session: any, idx: number) => (
+                        <div key={idx} className="p-3 bg-gray-50 rounded">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="font-medium">{session.title}</div>
+                              {session.speaker && <div className="text-sm text-gray-600">Speaker: {session.speaker}</div>}
+                              {session.roomName && <div className="text-sm text-gray-600">Room: {session.roomName}</div>}
+                              <div className="text-sm text-gray-600">Duration: {session.durationMin} min</div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const newSessions = [...previewData.sessions];
+                                newSessions.splice(idx, 1);
+                                setPreviewData({...previewData, sessions: newSessions});
+                              }}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowPreviewDialog(false);
+                      setPreviewData(null);
+                      setParsedData(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleCreateEventFromPreview}
+                    disabled={loading}
+                    className="bg-[#0F6AB4] hover:bg-[#0D5A9A]"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        Create Event
+                        <ArrowRight className="w-4 h-4 ml-2" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Card>
@@ -837,9 +1165,9 @@ export function EventsPage({ onNavigate }: EventsPageProps = {}) {
                       <div className="flex-shrink-0 text-right">
                         <div className="bg-gradient-to-br from-[#0F6AB4]/10 to-[#28A9A1]/10 rounded-lg p-3 border border-[#0F6AB4]/20">
                           <div className="flex items-center gap-1 mb-1">
-                            <DollarSign className="w-4 h-4 text-[#0F6AB4]" />
+                            <span className="text-xs font-semibold text-[#0F6AB4]">LKR</span>
                             <p className="text-sm font-semibold text-[#0F6AB4]">
-                              LKR {event.budget?.toLocaleString() || '0'}
+                              {event.budget?.toLocaleString() || '0'}
                             </p>
                           </div>
                           <p className="text-xs text-gray-500">Budget</p>

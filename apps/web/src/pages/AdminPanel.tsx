@@ -749,6 +749,7 @@ export function AdminPanel() {
                   title="Total Budget"
                   value={`LKR ${(totalBudget / 1000).toFixed(0)}K`}
                   icon={DollarSign}
+                  iconLabel="LKR"
                   color="#10B981"
                   trend={`Across ${totalEvents} events`}
                 />

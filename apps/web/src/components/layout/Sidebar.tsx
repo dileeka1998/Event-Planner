@@ -55,6 +55,7 @@ export function Sidebar({ currentPage, onNavigate, userRole }: SidebarProps) {
         {filteredMenuItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentPage === item.id;
+          const isBudget = item.id === 'budget';
           return (
             <button
               key={item.id}
@@ -66,7 +67,11 @@ export function Sidebar({ currentPage, onNavigate, userRole }: SidebarProps) {
                   : "text-gray-700 hover:bg-gray-100"
               )}
             >
-              <Icon className="w-5 h-5" />
+              {isBudget ? (
+                <span className="text-xs font-semibold w-5 text-center">LKR</span>
+              ) : (
+                <Icon className="w-5 h-5" />
+              )}
               <span className="text-sm">{item.label}</span>
             </button>
           );

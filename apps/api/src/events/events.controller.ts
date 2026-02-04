@@ -47,13 +47,19 @@ export class EventsController {
   @ApiResponse({ status: 201, description: 'The event has been successfully created.' })
   @ApiResponse({ status: 400, description: 'Bad Request.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
-  async create(@Body() dto: CreateEventDto) {
+  async create(@Body() dto: CreateEventDto, @Request() req: any) {
+    const organizerId = req.user.userId;
+    let parsedData: any = null;
+    
     // If brief provided, call AI service to parse and merge fields
     if (dto.brief) {
       try {
         const parsed = await this.ai.parseBrief({ text: dto.brief });
         console.log('AI parsed result:', JSON.stringify(parsed, null, 2));
         console.log('DTO before merge - expectedAudience:', dto.expectedAudience);
+        
+        // Store parsed data for later use (venue, rooms, sessions)
+        parsedData = parsed;
         
         // Use AI parsed value if not already provided
         if (!dto.expectedAudience && parsed?.estimatedAudience) {
@@ -63,9 +69,78 @@ export class EventsController {
         if (!dto.budget && parsed?.budgetLkr) {
           dto.budget = String(parsed.budgetLkr);
         }
+        
         // Use AI-extracted title if available and title not already set
         if (!dto.title && parsed?.title) {
           dto.title = parsed.title;
+        }
+        
+        // Use AI-extracted dates if not already provided
+        if (!dto.startDate && parsed?.startDate) {
+          dto.startDate = parsed.startDate;
+        }
+        if (!dto.endDate && parsed?.endDate) {
+          dto.endDate = parsed.endDate;
+        }
+        
+        // Handle venue: find or create if venue name is provided
+        if (parsed?.venueName && !dto.venueId) {
+          const venue = await this.events.findOrCreateVenue(
+            parsed.venueName,
+            organizerId,
+            parsed.venueCapacity || parsed.estimatedAudience, // Use venue capacity or fallback to expected audience
+            parsed.venueName // Use venue name as address if not provided
+          );
+          dto.venueId = venue.id;
+        }
+        
+        // Convert budget items from parsed data to DTO format
+        if (parsed?.budgetItems && parsed.budgetItems.length > 0) {
+          if (!dto.budgetItems) {
+            dto.budgetItems = [];
+          }
+          // Merge parsed budget items (avoid duplicates by description)
+          const existingDescriptions = new Set(dto.budgetItems.map(item => item.description?.toLowerCase()));
+          for (const item of parsed.budgetItems) {
+            if (!existingDescriptions.has(item.description.toLowerCase())) {
+              // Extract category from description or use description as category
+              // Try to infer category from common keywords in description
+              const description = item.description.toLowerCase();
+              let category = 'General';
+              
+              // Simple keyword-based category inference (can be enhanced)
+              if (description.includes('venue') || description.includes('rental') || description.includes('hall')) {
+                category = 'Venue';
+              } else if (description.includes('catering') || description.includes('food') || description.includes('beverage')) {
+                category = 'Catering';
+              } else if (description.includes('audio') || description.includes('visual') || description.includes('av') || description.includes('sound') || description.includes('lighting')) {
+                category = 'Technology';
+              } else if (description.includes('marketing') || description.includes('promotion') || description.includes('advertising')) {
+                category = 'Marketing';
+              } else if (description.includes('staff') || description.includes('personnel') || description.includes('coordination')) {
+                category = 'Staff';
+              } else if (description.includes('photography') || description.includes('videography') || description.includes('media')) {
+                category = 'Media';
+              } else if (description.includes('security') || description.includes('safety')) {
+                category = 'Security';
+              } else if (description.includes('transport') || description.includes('logistics')) {
+                category = 'Logistics';
+              }
+              
+              // Validate amount is reasonable (not exceeding 1 billion per item)
+              if (item.amount > 1000000000) {
+                console.warn(`Budget item "${item.description}" has unusually large amount: ${item.amount}. Skipping.`);
+                continue;
+              }
+              
+              dto.budgetItems.push({
+                category: category,
+                description: item.description,
+                estimatedAmount: String(item.amount),
+                quantity: 1,
+              });
+            }
+          }
         }
       } catch (error: unknown) {
         // The AI service is optional, so we don't rethrow the error.
@@ -76,7 +151,11 @@ export class EventsController {
     }
     
     console.log('Final DTO before service - expectedAudience:', dto.expectedAudience, 'venueId:', dto.venueId);
-    return this.events.create(dto);
+    
+    // Create event with parsed data (rooms and sessions will be created after event)
+    const event = await this.events.create(dto, parsedData, organizerId);
+    
+    return event;
   }
 
   @Post(':eventId/budget/items')
