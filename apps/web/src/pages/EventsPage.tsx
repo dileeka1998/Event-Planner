@@ -63,6 +63,48 @@ function parseDateRange(dateRange: string): { startDate: string; endDate: string
   return null;
 }
 
+// Budget category titles that must not be shown as sessions (from Budget Items section)
+const BUDGET_CATEGORY_SESSION_TITLES = new Set([
+  'venue', 'technology', 'marketing', 'catering', 'staff', 'security',
+  'media', 'general', 'budget items',
+]);
+
+function filterRealSessions(sessions: any[]): any[] {
+  if (!Array.isArray(sessions)) return [];
+  return sessions.filter((s: any) => {
+    const title = (s?.title ?? '').trim();
+    if (!title) return false;
+    const lower = title.toLowerCase();
+    if (BUDGET_CATEGORY_SESSION_TITLES.has(lower)) return false;
+    if (/^Budget\s+Items\s*\(/i.test(title)) return false;
+    return true;
+  });
+}
+
+// Mirror backend category inference (events.controller.ts) for consistent preview
+function inferBudgetCategory(description: string): string {
+  const d = (description ?? '').toLowerCase();
+  if (d.includes('venue') || d.includes('rental') || d.includes('hall')) return 'Venue';
+  if (d.includes('catering') || d.includes('food') || d.includes('beverage')) return 'Catering';
+  if (d.includes('audio') || d.includes('visual') || d.includes('av') || d.includes('sound') || d.includes('lighting')) return 'Technology';
+  if (d.includes('marketing') || d.includes('promotion') || d.includes('advertising')) return 'Marketing';
+  if (d.includes('staff') || d.includes('personnel') || d.includes('coordination')) return 'Staff';
+  if (d.includes('photography') || d.includes('videography') || d.includes('media')) return 'Media';
+  if (d.includes('security') || d.includes('safety')) return 'Security';
+  if (d.includes('transport') || d.includes('logistics')) return 'Logistics';
+  return 'General';
+}
+
+// Strip leading "Category: " from description when it matches inferred category for cleaner display
+function budgetItemDisplayDescription(description: string, category: string): string {
+  const desc = (description ?? '').trim();
+  const prefix = category + ': ';
+  if (category !== 'General' && desc.toLowerCase().startsWith(prefix.toLowerCase())) {
+    return desc.slice(prefix.length).trim();
+  }
+  return desc;
+}
+
 export function EventsPage({ onNavigate }: EventsPageProps = {}) {
   const [showAIResult, setShowAIResult] = useState(false);
   const [aiInput, setAiInput] = useState('');
@@ -242,7 +284,7 @@ export function EventsPage({ onNavigate }: EventsPageProps = {}) {
         venueCapacity: data.venueCapacity || data.estimatedAudience || 0,
         budgetItems: data.budgetItems || [],
         rooms: data.rooms || [],
-        sessions: data.sessions || [],
+        sessions: filterRealSessions(data.sessions || []),
       });
       
       setShowPreviewDialog(true);
@@ -332,7 +374,7 @@ export function EventsPage({ onNavigate }: EventsPageProps = {}) {
     try {
       // Prepare budget items for API
       const budgetItems = previewData.budgetItems?.map((item: any) => ({
-        category: 'Other',
+        category: inferBudgetCategory(item.description),
         description: item.description,
         estimatedAmount: String(item.amount),
         quantity: 1,
@@ -804,25 +846,32 @@ export function EventsPage({ onNavigate }: EventsPageProps = {}) {
                   <div className="space-y-4">
                     <h3 className="text-lg font-semibold">Budget Items</h3>
                     <div className="space-y-2 max-h-48 overflow-y-auto border rounded p-3">
-                      {previewData.budgetItems.map((item: any, idx: number) => (
-                        <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <div className="flex-1">
-                            <span className="font-medium">{item.description}</span>
-                            <span className="text-gray-600 ml-2">LKR {item.amount.toLocaleString()}</span>
+                      {previewData.budgetItems.map((item: any, idx: number) => {
+                        const category = inferBudgetCategory(item.description);
+                        const displayDescription = budgetItemDisplayDescription(item.description, category);
+                        return (
+                          <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge variant="secondary" className="shrink-0">{category}</Badge>
+                                <span className="font-medium">{displayDescription}</span>
+                              </div>
+                              <div className="text-sm text-gray-600 mt-1">Est. LKR {Number(item.amount).toLocaleString()}</div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const newItems = [...previewData.budgetItems];
+                                newItems.splice(idx, 1);
+                                setPreviewData({...previewData, budgetItems: newItems});
+                              }}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              const newItems = [...previewData.budgetItems];
-                              newItems.splice(idx, 1);
-                              setPreviewData({...previewData, budgetItems: newItems});
-                            }}
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}

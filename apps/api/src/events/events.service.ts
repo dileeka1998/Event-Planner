@@ -203,10 +203,10 @@ export class EventsService {
         }
       }
 
-      // Reload event with all relations
+      // Reload event with all relations (include sessions.room so response shows session room assignment)
       const eventWithRelations = await this.eventRepo.findOne({
         where: { id: savedEvent.id },
-        relations: ['organizer', 'venue', 'eventBudget', 'eventBudget.items', 'attendees', 'attendees.user', 'rooms', 'sessions'],
+        relations: ['organizer', 'venue', 'eventBudget', 'eventBudget.items', 'attendees', 'attendees.user', 'rooms', 'sessions', 'sessions.room'],
       });
 
       this.logger.log(`Event created successfully with ID: ${savedEvent.id}`);
@@ -527,8 +527,20 @@ export class EventsService {
   }
 
   /**
+   * Normalize room name for lookup: lowercase, trim, strip trailing parenthetical (e.g. " (capacity: 500)").
+   */
+  private normalizeRoomNameForLookup(roomName: string): string {
+    let name = roomName.trim();
+    const parenIdx = name.indexOf('(');
+    if (parenIdx !== -1) {
+      name = name.slice(0, parenIdx).trim();
+    }
+    return name.toLowerCase();
+  }
+
+  /**
    * Find or create rooms for an event (case-insensitive matching).
-   * Returns a map of room names to Room entities.
+   * Returns a map of room names to Room entities (exact and normalized keys).
    */
   async findOrCreateRooms(
     eventId: number,
@@ -556,9 +568,10 @@ export class EventsService {
       const normalizedName = roomInfo.name.toLowerCase().trim();
       const existingRoom = normalizedExistingRooms.get(normalizedName);
       
+      let room: Room;
       if (existingRoom) {
         this.logger.log(`Found existing room: ${existingRoom.name} (ID: ${existingRoom.id})`);
-        roomMap.set(roomInfo.name, existingRoom);
+        room = existingRoom;
       } else {
         // Create new room
         const event = await this.eventRepo.findOne({ where: { id: eventId } });
@@ -574,7 +587,13 @@ export class EventsService {
         
         const savedRoom = await this.roomRepo.save(newRoom);
         this.logger.log(`Created new room: ${savedRoom.name} (ID: ${savedRoom.id})`);
-        roomMap.set(roomInfo.name, savedRoom);
+        room = savedRoom;
+      }
+      
+      roomMap.set(roomInfo.name, room);
+      const normalizedKey = this.normalizeRoomNameForLookup(roomInfo.name);
+      if (normalizedKey && !roomMap.has(normalizedKey)) {
+        roomMap.set(normalizedKey, room);
       }
     }
     
@@ -595,10 +614,14 @@ export class EventsService {
     const createdSessions: Session[] = [];
     
     for (const sessionData of sessions) {
-      // Find room if specified
+      // Find room if specified (exact key first, then normalized key)
       let room: Room | null = null;
       if (sessionData.roomName) {
-        room = roomMap.get(sessionData.roomName) || null;
+        room = roomMap.get(sessionData.roomName) ?? null;
+        if (!room) {
+          const normalizedKey = this.normalizeRoomNameForLookup(sessionData.roomName);
+          room = roomMap.get(normalizedKey) ?? null;
+        }
         if (!room) {
           this.logger.warn(`Room "${sessionData.roomName}" not found for session "${sessionData.title}", creating without room`);
         }

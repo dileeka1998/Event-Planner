@@ -130,6 +130,10 @@ def extract_and_clean_title(text: str, doc) -> Optional[str]:
                 sent_low = sent.lower()
                 if any(keyword in sent_low for keyword in event_keywords):
                     title = sent.strip()
+                    # Strip structured-brief boilerplate so title = event name + year only
+                    title = re.sub(r'^Event\s+Name\s*:?\s*', '', title, flags=re.IGNORECASE).strip()
+                    title = re.sub(r'\s+Event\s+Type\s+.*$', '', title, flags=re.IGNORECASE).strip()
+                    title = re.sub(r'\s+Start\s*$', '', title, flags=re.IGNORECASE).strip()
 
                     # Remove common short prefixes
                     for prefix in ['a ', 'an ', 'the ', 'this ', 'that ', 'our ', 'my ']:
@@ -160,6 +164,10 @@ def extract_and_clean_title(text: str, doc) -> Optional[str]:
                 # pick short-ish meaningful sentences
                 if 10 < len(sent) and len(sent.split()) <= 12:
                     title = sent.strip()
+                    # Strip structured-brief boilerplate so title = event name + year only
+                    title = re.sub(r'^Event\s+Name\s*:?\s*', '', title, flags=re.IGNORECASE).strip()
+                    title = re.sub(r'\s+Event\s+Type\s+.*$', '', title, flags=re.IGNORECASE).strip()
+                    title = re.sub(r'\s+Start\s*$', '', title, flags=re.IGNORECASE).strip()
                     for prefix in ['a ', 'an ', 'the ', 'this ', 'that ']:
                         if title.lower().startswith(prefix):
                             title = title[len(prefix):].strip()
@@ -369,8 +377,11 @@ def extract_rooms(text: str) -> List[Dict[str, any]]:
             except ValueError:
                 pass
         
-        # Clean up room name
-        room_name = line.strip()
+        # Strip any parenthetical suffix (e.g. "(capacity:" or "(capacity: 150)") so room name matches session roomName
+        if '(' in line:
+            line = line[:line.index('(')].strip()
+        # Normalize spaces: collapse multiple spaces, trim
+        room_name = ' '.join(line.split()).strip()
         if room_name:
             rooms.append({
                 "name": room_name,
@@ -380,13 +391,22 @@ def extract_rooms(text: str) -> List[Dict[str, any]]:
     return rooms
 
 
+# Budget category labels that must not be treated as session titles (from Budget Items section)
+_BUDGET_CATEGORY_TITLES = frozenset(
+    s.lower() for s in (
+        'Venue', 'Technology', 'Marketing', 'Catering', 'Staff', 'Security',
+        'Media', 'General', 'Budget Items'
+    )
+)
+
+
 def extract_sessions(text: str) -> List[Dict[str, any]]:
-    """Extract sessions from 'Sessions (N Total)' section."""
+    """Extract sessions from 'Sessions (N Total)' section. Stops at 'Budget Items' section."""
     sessions = []
     
-    # Find sessions section
+    # Find sessions section; do not include content from "Budget Items (...)" section
     sessions_section_match = re.search(
-        r'sessions?\s*\(?\d*\s*total\)?[:\s]*(.*?)(?=\n\n|\n[A-Z][a-z]+\s*\(|$)',
+        r'sessions?\s*\(?\d*\s*total\)?[:\s]*(.*?)(?=\n\n|\n[A-Z][a-z]+\s*\(|\nBudget\s+Items\s*\(|$)',
         text,
         re.IGNORECASE | re.DOTALL
     )
@@ -398,30 +418,36 @@ def extract_sessions(text: str) -> List[Dict[str, any]]:
     
     # Pattern: "Session Title Room: Room Name Speaker: Speaker Name Duration: X min"
     lines = sessions_section.split('\n')
-    current_session = None
     
     for line in lines:
         line = line.strip()
         if not line:
             continue
         
-        # Check if this line starts a new session (has a title)
-        # Session title is usually the first part before "Room:"
+        # Stop if we hit a Budget Items header (e.g. "Budget Items (15 Total – LKR 2.5 Million)")
+        if re.match(r'^Budget\s+Items\s*\(', line, re.IGNORECASE):
+            break
+        
         room_match = re.search(r'room[:\s]+([^\n]+?)(?:\s+speaker[:\s]|$)', line, re.IGNORECASE)
         speaker_match = re.search(r'speaker[:\s]+([^\n]+?)(?:\s+duration[:\s]|$)', line, re.IGNORECASE)
         duration_match = re.search(r'duration[:\s]+(\d+)\s*(?:min|minutes?|mins?)', line, re.IGNORECASE)
         
-        # Extract session title (everything before "Room:")
         title_match = re.match(r'^([^:]+?)(?:\s+room[:\s]|$)', line, re.IGNORECASE)
         if title_match:
             title = title_match.group(1).strip()
         else:
-            # If no explicit title, use the whole line up to first colon
             title = line.split(':')[0].strip() if ':' in line else line.strip()
+        
+        # Skip lines that are budget section headers/categories, not real sessions
+        title_lower = title.lower()
+        if title_lower in _BUDGET_CATEGORY_TITLES:
+            continue
+        if re.match(r'^Budget\s+Items\s*\(', title, re.IGNORECASE):
+            continue
         
         room_name = room_match.group(1).strip() if room_match else None
         speaker = speaker_match.group(1).strip() if speaker_match else None
-        duration = int(duration_match.group(1)) if duration_match else 60  # Default 60 minutes
+        duration = int(duration_match.group(1)) if duration_match else 60
         
         if title:
             sessions.append({
