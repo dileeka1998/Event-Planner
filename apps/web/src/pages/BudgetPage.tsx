@@ -277,18 +277,21 @@ export function BudgetPage() {
               title="Total Estimated"
               value={`LKR ${totalEstimated.toLocaleString()}`}
               icon={DollarSign}
+              iconLabel="LKR"
               color="#0F6AB4"
             />
             <KPICard 
               title="Total Actual"
               value={`LKR ${totalActual.toLocaleString()}`}
               icon={DollarSign}
+              iconLabel="LKR"
               color="#28A9A1"
             />
             <KPICard 
               title="Remaining"
               value={`LKR ${remaining.toLocaleString()}`}
               icon={DollarSign}
+              iconLabel="LKR"
               color="#10B981"
               trend={`${variance}% ${parseFloat(variance) > 0 ? 'under' : 'over'} budget`}
             />
@@ -296,6 +299,7 @@ export function BudgetPage() {
               title="Utilization"
               value={`${utilizationPercent}%`}
               icon={DollarSign}
+              iconLabel="LKR"
               color="#F9B233"
               showProgress
               progressValue={parseFloat(utilizationPercent)}
@@ -432,7 +436,7 @@ export function BudgetPage() {
       {!selectedEventId && events.length === 0 && (
         <Card>
           <CardContent className="p-12 text-center">
-            <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <span className="text-3xl font-semibold text-gray-400 mx-auto mb-4 block">LKR</span>
             <h3 className="text-gray-900 mb-2">No events available</h3>
             <p className="text-gray-600">Create an event first to view its budget</p>
           </CardContent>

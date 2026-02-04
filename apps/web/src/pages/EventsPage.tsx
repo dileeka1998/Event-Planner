@@ -5,7 +5,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
-import { Plus, Sparkles, ArrowRight, Calendar as CalendarIcon, MapPin, X, Loader2, Filter, Users, DollarSign, Clock } from 'lucide-react';
+import { Plus, Sparkles, ArrowRight, Calendar as CalendarIcon, MapPin, X, Loader2, Filter, Users, Clock } from 'lucide-react';
 import { Calendar as CalendarComponent } from '../components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { Badge } from '../components/ui/badge';
@@ -1165,9 +1165,9 @@ export function EventsPage({ onNavigate }: EventsPageProps = {}) {
                       <div className="flex-shrink-0 text-right">
                         <div className="bg-gradient-to-br from-[#0F6AB4]/10 to-[#28A9A1]/10 rounded-lg p-3 border border-[#0F6AB4]/20">
                           <div className="flex items-center gap-1 mb-1">
-                            <DollarSign className="w-4 h-4 text-[#0F6AB4]" />
+                            <span className="text-xs font-semibold text-[#0F6AB4]">LKR</span>
                             <p className="text-sm font-semibold text-[#0F6AB4]">
-                              LKR {event.budget?.toLocaleString() || '0'}
+                              {event.budget?.toLocaleString() || '0'}
                             </p>
                           </div>
                           <p className="text-xs text-gray-500">Budget</p>

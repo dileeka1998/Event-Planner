@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Users, DollarSign, MapPin, Percent, Loader2 } from 'lucide-react';
+import { Calendar, Users, MapPin, Percent, Loader2 } from 'lucide-react';
 import { StatsCard } from '../components/dashboard/StatsCard';
 import { QuickActions } from '../components/dashboard/QuickActions';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -140,7 +140,7 @@ export function OrganizerDashboard({ onNavigate }: OrganizerDashboardProps) {
           className="h-20 bg-white border-2 border-[#28A9A1] text-[#28A9A1] hover:bg-[#28A9A1] hover:text-white"
         >
           <div className="flex flex-col items-center">
-            <DollarSign className="w-6 h-6 mb-1" />
+            <span className="text-sm font-semibold mb-1">LKR</span>
             <span>View Budget Report</span>
           </div>
         </Button>

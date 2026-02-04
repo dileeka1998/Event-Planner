@@ -121,6 +121,7 @@ export function ComponentLibraryPage() {
               title="Budget Usage"
               value="87%"
               icon={DollarSign}
+              iconLabel="LKR"
               color="#10B981"
               showProgress
               progressValue={87}

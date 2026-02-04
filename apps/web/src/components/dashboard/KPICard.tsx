@@ -7,6 +7,7 @@ interface KPICardProps {
   value: string | number;
   icon: LucideIcon;
   color: string;
+  iconLabel?: string;
   trend?: string;
   showProgress?: boolean;
   progressValue?: number;
@@ -17,6 +18,7 @@ export function KPICard({
   value, 
   icon: Icon, 
   color, 
+  iconLabel,
   trend,
   showProgress = false,
   progressValue = 0
@@ -33,7 +35,11 @@ export function KPICard({
             className="w-12 h-12 rounded-lg flex items-center justify-center"
             style={{ backgroundColor: `${color}15` }}
           >
-            <Icon className="w-6 h-6" style={{ color }} />
+            {iconLabel ? (
+              <span className="text-xs font-semibold" style={{ color }}>{iconLabel}</span>
+            ) : (
+              <Icon className="w-6 h-6" style={{ color }} />
+            )}
           </div>
         </div>
         {showProgress && (
